@@ -1,16 +1,25 @@
+
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Poppins&size=28&pause=1000&color=FF9933&center=true&vCenter=true&width=800&lines=BharatVoice+Assistant;AI+for+Rural+India;Multilingual+Voice+AI+for+Bharat;Offline+%7C+Secure+%7C+Inclusive" />
+</p>
+
+<img width="1536" height="1024" alt="ai bharat voice" src="https://github.com/user-attachments/assets/98895c38-62bd-44cc-869d-ee9a5c547158" />
+
+
 # BharatVoice Assistant
 
 An AI-powered multilingual voice assistant specifically designed for the Indian market, supporting 10+ Indian languages with advanced code-switching detection and cultural context understanding.
 
 ## Features
 
-- **Multilingual Voice Recognition**: Support for Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, and English (Indian accent)
-- **Code-Switching Detection**: Seamless handling of mixed-language conversations
-- **Cultural Context Understanding**: Recognition of Indian festivals, local terminology, and cultural references
-- **Indian Service Integration**: Integration with Indian Railways, UPI payments, food delivery, and government services
-- **Offline Capabilities**: Basic functionality for rural areas with limited connectivity
-- **Privacy & Security**: Compliant with Indian data protection laws with local encryption
-- **Accessibility Features**: Support for users with visual or hearing impairments
+- 🎙️ **Multilingual Voice Recognition**: Support for Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, and English (Indian accent)
+- 🔁 **Code-Switching Detection**: Seamless handling of mixed-language conversations
+- 🧠 **Cultural Context Understanding**: Recognition of Indian festivals, local terminology, and cultural references
+- 🔁 **Indian Service Integration**: Integration with Indian Railways, UPI payments, food delivery, and government services
+- 📡 **Offline Capabilities**: Basic functionality for rural areas with limited connectivity
+- 🔐 **Privacy & Security**: Compliant with Indian data protection laws with local encryption
+- ♿ **Accessibility Features**: Support for users with visual or hearing impairments
+
 
 ## Architecture
 
@@ -23,13 +32,73 @@ BharatVoice follows a microservices architecture with the following core service
 - **Authentication Service**: User identity and privacy compliance
 - **Offline Sync Service**: Data synchronization and offline capability management
 
-## Quick Start
+## 🏗️ System Architecture
+
+```text
+User Voice 🎤
+     ↓
+Voice Processing Service
+     ↓
+Language Engine (ASR + Code-Switch)
+     ↓
+Context Management
+     ↓
+Response Generation
+     ↓
+TTS 🔊 → User 
+```
+
+<h2>🧰 Tech Stack</h2>
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width="48"/><br/>
+      Python 3.9+
+    </td>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" width="48"/><br/>
+      FastAPI
+    </td>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original.svg" width="48"/><br/>
+      Docker
+    </td>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/kubernetes/kubernetes-plain.svg" width="48"/><br/>
+      Kubernetes
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" width="48"/><br/>
+      PostgreSQL
+    </td>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/redis/redis-original.svg" width="48"/><br/>
+      Redis
+    </td>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/amazonwebservices/amazonwebservices-original.svg" width="48"/><br/>
+      AWS
+    </td>
+    <td align="center">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/git/git-original.svg" width="48"/><br/>
+      Git
+    </td>
+  </tr>
+</table>
+
+
+
+### Quick Start
 
 ### Prerequisites
 
 - Python 3.9 or higher
 - Redis server (for caching)
 - SQLite (for local development)
+
 
 ### Installation
 
@@ -121,6 +190,13 @@ pre-commit run --all-files
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+## 🚀 Project Status
+
+🟢 **Production-Ready Architecture**  
+🟢 **All Core Services Implemented**  
+🟢 **Offline + Multilingual Support**  
+🟡 **External APIs: Configurable**
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -130,4 +206,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support and questions:
 - Documentation: https://docs.bharatvoice.ai
 - Issues: https://github.com/bharatvoice/assistant/issues
+
 - Email: support@bharatvoice.ai
+
+
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=FF9933&height=5"/>
+  <br/>
+  🇮🇳 Built with ❤️ for Bharat | AI for Rural Innovation
+</p>
+
+
+
