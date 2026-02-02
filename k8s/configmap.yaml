@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bharatvoice-config
+  namespace: bharatvoice
+data:
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  LOG_LEVEL: "info"
+  WORKERS: "4"
+  MAX_WORKERS: "8"
+  WORKER_CLASS: "uvicorn.workers.UvicornWorker"
+  TIMEOUT: "120"
+  KEEPALIVE: "5"
+  DATABASE_HOST: "postgres-service"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "bharatvoice"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  CELERY_BROKER_DB: "1"
+  CELERY_RESULT_DB: "2"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: bharatvoice
+data:
+  nginx.conf: |
+    upstream bharatvoice_backend {
+        least_conn;
+        server bharatvoice-app-service:8000 max_fails=3 fail_timeout=30s;
+    }
+    
+    server {
+        listen 80;
+        server_name _;
+        
+        # Security headers
+        add_header X-Frame-Options DENY;
+        add_header X-Content-Type-Options nosniff;
+        add_header X-XSS-Protection "1; mode=block";
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+        
+        # Rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        limit_req zone=api burst=20 nodelay;
+        
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+        
+        # Client body size limit
+        client_max_body_size 10M;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        location /health {
+            proxy_pass http://bharatvoice_backend;
+            access_log off;
+        }
+        
+        location / {
+            proxy_pass http://bharatvoice_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }

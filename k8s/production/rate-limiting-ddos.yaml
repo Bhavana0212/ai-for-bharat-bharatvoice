@@ -1,0 +1,504 @@
+# Rate Limiting and DDoS Protection Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-rate-limit-config
+  namespace: ingress-nginx
+data:
+  nginx.conf: |
+    # Rate limiting zones
+    http {
+        # General API rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        
+        # Authentication endpoints (stricter)
+        limit_req_zone $binary_remote_addr zone=auth:10m rate=1r/s;
+        
+        # Voice processing endpoints (moderate)
+        limit_req_zone $binary_remote_addr zone=voice:10m rate=5r/s;
+        
+        # Payment endpoints (very strict)
+        limit_req_zone $binary_remote_addr zone=payment:10m rate=1r/m;
+        
+        # Connection limiting
+        limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+        
+        # Request size limiting
+        client_max_body_size 50m;
+        client_body_buffer_size 128k;
+        client_header_buffer_size 1k;
+        large_client_header_buffers 4 4k;
+        
+        # Timeout settings
+        client_body_timeout 12;
+        client_header_timeout 12;
+        keepalive_timeout 15;
+        send_timeout 10;
+        
+        # Buffer overflow protection
+        client_body_buffer_size 128k;
+        client_header_buffer_size 1k;
+        client_max_body_size 50m;
+        large_client_header_buffers 4 4k;
+        
+        # Hide server information
+        server_tokens off;
+        
+        # Security headers
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        
+        # GeoIP blocking (example for high-risk countries)
+        map $geoip_country_code $blocked_country {
+            default 0;
+            CN 1;  # China
+            RU 1;  # Russia
+            KP 1;  # North Korea
+        }
+        
+        # User agent blocking
+        map $http_user_agent $blocked_agent {
+            default 0;
+            ~*bot 1;
+            ~*crawler 1;
+            ~*spider 1;
+            ~*scanner 1;
+            ~*nikto 1;
+            ~*sqlmap 1;
+        }
+        
+        # Request method filtering
+        map $request_method $blocked_method {
+            default 0;
+            TRACE 1;
+            DELETE 1;
+            PUT 1;
+        }
+    }
+  
+  server-snippets.conf: |
+    # Rate limiting application
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        limit_conn conn_limit_per_ip 10;
+        
+        # Block based on conditions
+        if ($blocked_country) {
+            return 403 "Access denied from your country";
+        }
+        
+        if ($blocked_agent) {
+            return 403 "Blocked user agent";
+        }
+        
+        if ($blocked_method) {
+            return 405 "Method not allowed";
+        }
+        
+        proxy_pass http://upstream;
+    }
+    
+    location /api/auth/ {
+        limit_req zone=auth burst=5 nodelay;
+        limit_conn conn_limit_per_ip 3;
+        proxy_pass http://upstream;
+    }
+    
+    location /api/voice/ {
+        limit_req zone=voice burst=10 nodelay;
+        limit_conn conn_limit_per_ip 5;
+        proxy_pass http://upstream;
+    }
+    
+    location /api/payment/ {
+        limit_req zone=payment burst=2 nodelay;
+        limit_conn conn_limit_per_ip 1;
+        proxy_pass http://upstream;
+    }
+    
+    # Block common attack patterns
+    location ~* \.(php|asp|aspx|jsp)$ {
+        return 403 "Forbidden file type";
+    }
+    
+    location ~* /\. {
+        return 403 "Hidden files access denied";
+    }
+    
+    location ~* /(wp-admin|wp-login|phpmyadmin|admin|administrator) {
+        return 403 "Admin access denied";
+    }
+    
+    # Block SQL injection attempts
+    if ($args ~* "union.*select|insert.*into|delete.*from|drop.*table") {
+        return 403 "SQL injection attempt detected";
+    }
+    
+    # Block XSS attempts
+    if ($args ~* "<script|javascript:|vbscript:|onload=|onerror=") {
+        return 403 "XSS attempt detected";
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fail2ban-config
+  namespace: bharatvoice
+data:
+  jail.local: |
+    [DEFAULT]
+    # Ban IP for 1 hour
+    bantime = 3600
+    
+    # Check for attacks in last 10 minutes
+    findtime = 600
+    
+    # Ban after 5 attempts
+    maxretry = 5
+    
+    # Email notifications
+    destemail = security@bharatvoice.com
+    sender = fail2ban@bharatvoice.com
+    mta = sendmail
+    
+    # Actions
+    action = %(action_mwl)s
+    
+    [nginx-req-limit]
+    enabled = true
+    port = http,https
+    filter = nginx-req-limit
+    logpath = /var/log/nginx/error.log
+    maxretry = 10
+    
+    [nginx-login]
+    enabled = true
+    port = http,https
+    filter = nginx-login
+    logpath = /var/log/nginx/access.log
+    maxretry = 3
+    bantime = 7200
+    
+    [nginx-badbots]
+    enabled = true
+    port = http,https
+    filter = nginx-badbots
+    logpath = /var/log/nginx/access.log
+    maxretry = 2
+    bantime = 86400
+    
+    [nginx-noscript]
+    enabled = true
+    port = http,https
+    filter = nginx-noscript
+    logpath = /var/log/nginx/access.log
+    maxretry = 6
+    
+    [nginx-noproxy]
+    enabled = true
+    port = http,https
+    filter = nginx-noproxy
+    logpath = /var/log/nginx/access.log
+    maxretry = 2
+    
+    [nginx-nohome]
+    enabled = true
+    port = http,https
+    filter = nginx-nohome
+    logpath = /var/log/nginx/access.log
+    maxretry = 2
+  
+  filter-nginx-req-limit.conf: |
+    [Definition]
+    failregex = limiting requests, excess: .* by zone .*, client: <HOST>
+    ignoreregex =
+  
+  filter-nginx-login.conf: |
+    [Definition]
+    failregex = ^<HOST> -.*"(GET|POST).*/api/auth/login.*" 40[01]
+    ignoreregex =
+  
+  filter-nginx-badbots.conf: |
+    [Definition]
+    failregex = ^<HOST> -.*"(GET|POST).*HTTP.*" 200 .* ".*bot.*"
+                ^<HOST> -.*"(GET|POST).*HTTP.*" 200 .* ".*crawler.*"
+                ^<HOST> -.*"(GET|POST).*HTTP.*" 200 .* ".*spider.*"
+    ignoreregex =
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fail2ban
+  namespace: bharatvoice
+  labels:
+    app: fail2ban
+spec:
+  selector:
+    matchLabels:
+      app: fail2ban
+  template:
+    metadata:
+      labels:
+        app: fail2ban
+    spec:
+      hostNetwork: true
+      containers:
+      - name: fail2ban
+        image: crazymax/fail2ban:latest
+        env:
+        - name: TZ
+          value: "Asia/Kolkata"
+        - name: F2B_LOG_LEVEL
+          value: "INFO"
+        - name: F2B_DB_PURGE_AGE
+          value: "1d"
+        volumeMounts:
+        - name: fail2ban-config
+          mountPath: /etc/fail2ban/jail.local
+          subPath: jail.local
+        - name: fail2ban-config
+          mountPath: /etc/fail2ban/filter.d/nginx-req-limit.conf
+          subPath: filter-nginx-req-limit.conf
+        - name: fail2ban-config
+          mountPath: /etc/fail2ban/filter.d/nginx-login.conf
+          subPath: filter-nginx-login.conf
+        - name: fail2ban-config
+          mountPath: /etc/fail2ban/filter.d/nginx-badbots.conf
+          subPath: filter-nginx-badbots.conf
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+          readOnly: true
+        - name: fail2ban-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+      volumes:
+      - name: fail2ban-config
+        configMap:
+          name: fail2ban-config
+      - name: nginx-logs
+        hostPath:
+          path: /var/log/nginx
+      - name: fail2ban-data
+        hostPath:
+          path: /var/lib/fail2ban
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ddos-protection-config
+  namespace: bharatvoice
+data:
+  ddos-deflate.conf: |
+    # DDoS-Deflate Configuration
+    FREQ=1          # Frequency in minutes for running the script
+    NO_OF_CONNECTIONS=150  # Max connections per IP
+    APF_BAN=1       # Use APF for banning (0=iptables, 1=APF)
+    KILL=0          # Kill connections (0=no, 1=yes)
+    BAN_PERIOD=600  # Ban period in seconds (10 minutes)
+    EMAIL_TO="security@bharatvoice.com"
+    IGNORE_IP_LIST="/usr/local/ddos/ignore.ip.list"
+    
+    # Whitelist important IPs
+    IGNORE_IP_LIST_CONTENT="
+    127.0.0.1
+    10.0.0.0/8
+    172.16.0.0/12
+    192.168.0.0/16
+    "
+  
+  ddos-monitor.sh: |
+    #!/bin/bash
+    
+    # DDoS monitoring script
+    LOG_FILE="/var/log/ddos-monitor.log"
+    THRESHOLD=100
+    
+    while true; do
+        # Check current connections
+        CONNECTIONS=$(netstat -ntu | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | head -10)
+        
+        # Log top connections
+        echo "$(date): Top connections:" >> $LOG_FILE
+        echo "$CONNECTIONS" >> $LOG_FILE
+        
+        # Check for potential DDoS
+        TOP_IP=$(echo "$CONNECTIONS" | head -1 | awk '{print $2}')
+        TOP_COUNT=$(echo "$CONNECTIONS" | head -1 | awk '{print $1}')
+        
+        if [ "$TOP_COUNT" -gt "$THRESHOLD" ]; then
+            echo "$(date): Potential DDoS detected from $TOP_IP with $TOP_COUNT connections" >> $LOG_FILE
+            
+            # Block the IP (if not whitelisted)
+            if ! grep -q "$TOP_IP" /usr/local/ddos/ignore.ip.list; then
+                iptables -A INPUT -s $TOP_IP -j DROP
+                echo "$(date): Blocked IP $TOP_IP" >> $LOG_FILE
+                
+                # Send alert
+                echo "DDoS attack detected and blocked from IP: $TOP_IP" | mail -s "DDoS Alert - BharatVoice" security@bharatvoice.com
+            fi
+        fi
+        
+        sleep 60
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ddos-protection
+  namespace: bharatvoice
+  labels:
+    app: ddos-protection
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ddos-protection
+  template:
+    metadata:
+      labels:
+        app: ddos-protection
+    spec:
+      hostNetwork: true
+      containers:
+      - name: ddos-monitor
+        image: alpine:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          apk add --no-cache iptables netstat-nat mailx
+          /scripts/ddos-monitor.sh
+        volumeMounts:
+        - name: ddos-config
+          mountPath: /scripts
+        - name: ddos-logs
+          mountPath: /var/log
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+      volumes:
+      - name: ddos-config
+        configMap:
+          name: ddos-protection-config
+          defaultMode: 0755
+      - name: ddos-logs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waf-rules
+  namespace: bharatvoice
+data:
+  modsecurity.conf: |
+    # ModSecurity Configuration
+    SecRuleEngine On
+    SecRequestBodyAccess On
+    SecResponseBodyAccess Off
+    SecRequestBodyLimit 13107200
+    SecRequestBodyNoFilesLimit 131072
+    SecRequestBodyInMemoryLimit 131072
+    SecRequestBodyLimitAction Reject
+    SecPcreMatchLimit 1000
+    SecPcreMatchLimitRecursion 1000
+    
+    # Audit logging
+    SecAuditEngine RelevantOnly
+    SecAuditLogRelevantStatus "^(?:5|4(?!04))"
+    SecAuditLogParts ABIJDEFHZ
+    SecAuditLogType Serial
+    SecAuditLog /var/log/modsec_audit.log
+    
+    # Include OWASP Core Rule Set
+    Include /etc/modsecurity/owasp-crs/*.conf
+    Include /etc/modsecurity/owasp-crs/rules/*.conf
+    
+    # Custom rules for BharatVoice
+    SecRule REQUEST_HEADERS:User-Agent "@contains bot" \
+        "id:1001,phase:1,block,msg:'Bot detected',logdata:'User-Agent: %{REQUEST_HEADERS.User-Agent}'"
+    
+    SecRule ARGS "@detectSQLi" \
+        "id:1002,phase:2,block,msg:'SQL Injection Attack Detected',logdata:'Matched Data: %{MATCHED_VAR} found within %{MATCHED_VAR_NAME}'"
+    
+    SecRule ARGS "@detectXSS" \
+        "id:1003,phase:2,block,msg:'XSS Attack Detected',logdata:'Matched Data: %{MATCHED_VAR} found within %{MATCHED_VAR_NAME}'"
+    
+    # Rate limiting rules
+    SecRule IP:bf_counter "@gt 20" \
+        "id:1004,phase:1,deny,status:429,msg:'Rate limit exceeded',expirevar:IP.bf_counter=60"
+    
+    SecRule REQUEST_URI "@beginsWith /api/" \
+        "id:1005,phase:1,pass,setvar:IP.bf_counter=+1,expirevar:IP.bf_counter=60"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ddos-protection-policy
+  namespace: bharatvoice
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow ingress from nginx-ingress only
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8001
+  # Allow internal communication
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: bharatvoice
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ddos-protection-metrics
+  namespace: bharatvoice
+  labels:
+    app: ddos-protection
+spec:
+  selector:
+    app: ddos-protection
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: metrics
+  type: ClusterIP

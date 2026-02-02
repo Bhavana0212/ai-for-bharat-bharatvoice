@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bharatvoice-worker
+  namespace: bharatvoice
+  labels:
+    app: bharatvoice-worker
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bharatvoice-worker
+  template:
+    metadata:
+      labels:
+        app: bharatvoice-worker
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9540"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: bharatvoice-worker
+        image: bharatvoice/worker:latest
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
+        - name: REDIS_URL
+          value: "redis://redis-service:6379/0"
+        - name: CELERY_BROKER_URL
+          value: "redis://redis-service:6379/1"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://redis-service:6379/2"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: bharatvoice-secrets
+              key: SECRET_KEY
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_DB
+        envFrom:
+        - configMapRef:
+            name: bharatvoice-config
+        volumeMounts:
+        - name: app-data
+          mountPath: /app/data
+        - name: app-cache
+          mountPath: /app/cache
+        - name: app-models
+          mountPath: /app/models
+        - name: worker-logs
+          mountPath: /app/logs
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - bharatvoice.worker
+            - inspect
+            - ping
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - bharatvoice.worker
+            - inspect
+            - active
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 3
+      volumes:
+      - name: app-data
+        persistentVolumeClaim:
+          claimName: app-data-pvc
+      - name: app-cache
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: app-models
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: worker-logs
+        emptyDir:
+          sizeLimit: 500Mi
+      imagePullSecrets:
+      - name: bharatvoice-registry-secret
