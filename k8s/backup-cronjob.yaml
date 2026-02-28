@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -224,4 +225,232 @@ spec:
               claimName: backup-pvc
           - name: app-data
             persistentVolumeClaim:
+=======
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: database-backup
+  namespace: bharatvoice
+  labels:
+    app: database-backup
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  timeZone: "Asia/Kolkata"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: database-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache curl aws-cli gnupg
+              /scripts/backup-database.sh
+            env:
+            - name: POSTGRES_HOST
+              value: "postgres-service"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: S3_BUCKET
+              value: "bharatvoice-backups"
+            - name: RETENTION_DAYS
+              value: "30"
+            - name: BACKUP_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bharatvoice-secrets
+                  key: BACKUP_WEBHOOK_URL
+                  optional: true
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backups
+            - name: encryption-key
+              mountPath: /secrets
+              readOnly: true
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+          - name: encryption-key
+            secret:
+              secretName: backup-encryption-key
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+  namespace: bharatvoice
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: standard
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-backup
+  namespace: bharatvoice
+  labels:
+    app: redis-backup
+spec:
+  schedule: "0 3 * * *"  # Daily at 3 AM
+  timeZone: "Asia/Kolkata"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: redis-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: redis:7-alpine
+            command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache curl aws-cli
+              TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
+              BACKUP_FILE="redis_backup_${TIMESTAMP}.rdb"
+              
+              # Create Redis backup
+              redis-cli -h redis-service -p 6379 --rdb "/backups/${BACKUP_FILE}"
+              
+              # Upload to S3 if configured
+              if [ -n "${S3_BUCKET}" ]; then
+                aws s3 cp "/backups/${BACKUP_FILE}" "s3://${S3_BUCKET}/redis/"
+                rm "/backups/${BACKUP_FILE}"
+              fi
+              
+              # Clean up old backups
+              find /backups -name "redis_backup_*.rdb" -type f -mtime +7 -delete
+            env:
+            - name: S3_BUCKET
+              value: "bharatvoice-backups"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: application-data-backup
+  namespace: bharatvoice
+  labels:
+    app: application-data-backup
+spec:
+  schedule: "0 4 * * 0"  # Weekly on Sunday at 4 AM
+  timeZone: "Asia/Kolkata"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: application-data-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: alpine:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache tar gzip curl aws-cli
+              TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
+              BACKUP_FILE="app_data_backup_${TIMESTAMP}.tar.gz"
+              
+              # Create application data backup
+              tar -czf "/backups/${BACKUP_FILE}" -C /app/data .
+              
+              # Upload to S3 if configured
+              if [ -n "${S3_BUCKET}" ]; then
+                aws s3 cp "/backups/${BACKUP_FILE}" "s3://${S3_BUCKET}/app-data/"
+                rm "/backups/${BACKUP_FILE}"
+              fi
+              
+              # Clean up old backups
+              find /backups -name "app_data_backup_*.tar.gz" -type f -mtime +30 -delete
+            env:
+            - name: S3_BUCKET
+              value: "bharatvoice-backups"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            - name: app-data
+              mountPath: /app/data
+              readOnly: true
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "200m"
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+          - name: app-data
+            persistentVolumeClaim:
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
               claimName: app-data-pvc

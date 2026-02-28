@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 groups:
   - name: bharatvoice.rules
     rules:
@@ -186,4 +187,194 @@ groups:
         service: voice-processing
       annotations:
         summary: "High voice processing latency"
+=======
+groups:
+  - name: bharatvoice.rules
+    rules:
+    # Application Health Alerts
+    - alert: BharatVoiceAppDown
+      expr: up{job="bharatvoice-app"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: bharatvoice-app
+      annotations:
+        summary: "BharatVoice application is down"
+        description: "BharatVoice application has been down for more than 1 minute."
+
+    - alert: BharatVoiceHighErrorRate
+      expr: rate(http_requests_total{job="bharatvoice-app",status=~"5.."}[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        service: bharatvoice-app
+      annotations:
+        summary: "High error rate in BharatVoice application"
+        description: "Error rate is {{ $value }} errors per second for the last 5 minutes."
+
+    - alert: BharatVoiceHighLatency
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="bharatvoice-app"}[5m])) > 2
+      for: 5m
+      labels:
+        severity: warning
+        service: bharatvoice-app
+      annotations:
+        summary: "High latency in BharatVoice application"
+        description: "95th percentile latency is {{ $value }}s for the last 5 minutes."
+
+    # Resource Usage Alerts
+    - alert: BharatVoiceHighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total{pod=~"bharatvoice-app-.*"}[5m]) * 100 > 80
+      for: 10m
+      labels:
+        severity: warning
+        service: bharatvoice-app
+      annotations:
+        summary: "High CPU usage in BharatVoice application"
+        description: "CPU usage is {{ $value }}% for pod {{ $labels.pod }}."
+
+    - alert: BharatVoiceHighMemoryUsage
+      expr: container_memory_usage_bytes{pod=~"bharatvoice-app-.*"} / container_spec_memory_limit_bytes * 100 > 85
+      for: 10m
+      labels:
+        severity: warning
+        service: bharatvoice-app
+      annotations:
+        summary: "High memory usage in BharatVoice application"
+        description: "Memory usage is {{ $value }}% for pod {{ $labels.pod }}."
+
+    # Database Alerts
+    - alert: PostgreSQLDown
+      expr: up{job="postgres-exporter"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: postgresql
+      annotations:
+        summary: "PostgreSQL is down"
+        description: "PostgreSQL database has been down for more than 1 minute."
+
+    - alert: PostgreSQLHighConnections
+      expr: pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        service: postgresql
+      annotations:
+        summary: "PostgreSQL high connection usage"
+        description: "PostgreSQL connection usage is {{ $value }}%."
+
+    - alert: PostgreSQLSlowQueries
+      expr: rate(pg_stat_database_tup_returned[5m]) / rate(pg_stat_database_tup_fetched[5m]) < 0.1
+      for: 10m
+      labels:
+        severity: warning
+        service: postgresql
+      annotations:
+        summary: "PostgreSQL slow queries detected"
+        description: "Query efficiency is {{ $value }} for database {{ $labels.datname }}."
+
+    # Redis Alerts
+    - alert: RedisDown
+      expr: up{job="redis-exporter"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: redis
+      annotations:
+        summary: "Redis is down"
+        description: "Redis cache has been down for more than 1 minute."
+
+    - alert: RedisHighMemoryUsage
+      expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 90
+      for: 5m
+      labels:
+        severity: warning
+        service: redis
+      annotations:
+        summary: "Redis high memory usage"
+        description: "Redis memory usage is {{ $value }}%."
+
+    - alert: RedisHighConnections
+      expr: redis_connected_clients > 100
+      for: 5m
+      labels:
+        severity: warning
+        service: redis
+      annotations:
+        summary: "Redis high connection count"
+        description: "Redis has {{ $value }} connected clients."
+
+    # Worker Alerts
+    - alert: BharatVoiceWorkerDown
+      expr: up{job="bharatvoice-worker"} == 0
+      for: 2m
+      labels:
+        severity: warning
+        service: bharatvoice-worker
+      annotations:
+        summary: "BharatVoice worker is down"
+        description: "BharatVoice background worker has been down for more than 2 minutes."
+
+    - alert: BharatVoiceHighQueueLength
+      expr: redis_queue_length{queue="bharatvoice_tasks"} > 50
+      for: 5m
+      labels:
+        severity: warning
+        service: bharatvoice-worker
+      annotations:
+        summary: "High task queue length"
+        description: "Task queue length is {{ $value }} tasks."
+
+    # Kubernetes Alerts
+    - alert: KubernetesPodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        service: kubernetes
+      annotations:
+        summary: "Pod is crash looping"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping."
+
+    - alert: KubernetesNodeNotReady
+      expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        service: kubernetes
+      annotations:
+        summary: "Kubernetes node not ready"
+        description: "Node {{ $labels.node }} is not ready."
+
+    # Voice Processing Alerts
+    - alert: BharatVoiceASRFailureRate
+      expr: rate(bharatvoice_asr_failures_total[5m]) / rate(bharatvoice_asr_requests_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        service: voice-processing
+      annotations:
+        summary: "High ASR failure rate"
+        description: "ASR failure rate is {{ $value }} for the last 5 minutes."
+
+    - alert: BharatVoiceTTSFailureRate
+      expr: rate(bharatvoice_tts_failures_total[5m]) / rate(bharatvoice_tts_requests_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        service: voice-processing
+      annotations:
+        summary: "High TTS failure rate"
+        description: "TTS failure rate is {{ $value }} for the last 5 minutes."
+
+    - alert: BharatVoiceVoiceProcessingLatency
+      expr: histogram_quantile(0.95, rate(bharatvoice_voice_processing_duration_seconds_bucket[5m])) > 5
+      for: 5m
+      labels:
+        severity: warning
+        service: voice-processing
+      annotations:
+        summary: "High voice processing latency"
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
         description: "95th percentile voice processing latency is {{ $value }}s."

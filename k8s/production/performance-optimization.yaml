@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Performance Optimization and Auto-scaling Configuration
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -767,4 +768,775 @@ spec:
   - port: metrics
     interval: 30s
     path: /metrics
+=======
+# Performance Optimization and Auto-scaling Configuration
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bharatvoice-app-hpa
+  namespace: bharatvoice
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bharatvoice-app
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: postgres-replica-hpa
+  namespace: bharatvoice
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: postgres-replica
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 180
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: redis-replica-hpa
+  namespace: bharatvoice
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: redis-replica
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 180
+    scaleUp:
+      stabilizationWindowSeconds: 180
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 120
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: bharatvoice-app-vpa
+  namespace: bharatvoice
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bharatvoice-app
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: bharatvoice-app
+      minAllowed:
+        cpu: 500m
+        memory: 1Gi
+      maxAllowed:
+        cpu: 4000m
+        memory: 8Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: performance-tuning-config
+  namespace: bharatvoice
+data:
+  # Application performance settings
+  app-performance.conf: |
+    # FastAPI/Uvicorn optimization
+    WORKERS=4
+    WORKER_CLASS=uvicorn.workers.UvicornWorker
+    WORKER_CONNECTIONS=1000
+    MAX_REQUESTS=1000
+    MAX_REQUESTS_JITTER=100
+    PRELOAD_APP=true
+    KEEPALIVE=5
+    
+    # Connection pooling
+    DATABASE_POOL_SIZE=20
+    DATABASE_MAX_OVERFLOW=30
+    DATABASE_POOL_TIMEOUT=30
+    DATABASE_POOL_RECYCLE=3600
+    
+    # Redis connection optimization
+    REDIS_MAX_CONNECTIONS=50
+    REDIS_CONNECTION_POOL_SIZE=20
+    REDIS_SOCKET_TIMEOUT=5.0
+    REDIS_SOCKET_CONNECT_TIMEOUT=5.0
+    REDIS_SOCKET_KEEPALIVE=true
+    REDIS_SOCKET_KEEPALIVE_OPTIONS={}
+    
+    # Caching optimization
+    CACHE_DEFAULT_TTL=3600
+    CACHE_MAX_SIZE=100MB
+    CACHE_EVICTION_POLICY=lru
+    
+    # Audio processing optimization
+    AUDIO_BUFFER_SIZE=4096
+    AUDIO_SAMPLE_RATE=16000
+    AUDIO_CHANNELS=1
+    AUDIO_PROCESSING_THREADS=2
+    
+    # ML model optimization
+    WHISPER_MODEL_CACHE_SIZE=3
+    TTS_MODEL_CACHE_SIZE=2
+    MODEL_INFERENCE_BATCH_SIZE=4
+    MODEL_INFERENCE_TIMEOUT=30
+  
+  # Nginx optimization
+  nginx-performance.conf: |
+    # Worker processes
+    worker_processes auto;
+    worker_rlimit_nofile 65535;
+    
+    events {
+        worker_connections 4096;
+        use epoll;
+        multi_accept on;
+    }
+    
+    http {
+        # Basic optimization
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        keepalive_requests 1000;
+        types_hash_max_size 2048;
+        server_tokens off;
+        
+        # Buffer optimization
+        client_body_buffer_size 128k;
+        client_max_body_size 50m;
+        client_header_buffer_size 1k;
+        large_client_header_buffers 4 4k;
+        output_buffers 1 32k;
+        postpone_output 1460;
+        
+        # Timeout optimization
+        client_header_timeout 3m;
+        client_body_timeout 3m;
+        send_timeout 3m;
+        
+        # Compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_types
+            text/plain
+            text/css
+            text/xml
+            text/javascript
+            application/json
+            application/javascript
+            application/xml+rss
+            application/atom+xml
+            image/svg+xml;
+        
+        # Caching
+        open_file_cache max=200000 inactive=20s;
+        open_file_cache_valid 30s;
+        open_file_cache_min_uses 2;
+        open_file_cache_errors on;
+        
+        # Connection pooling to upstream
+        upstream bharatvoice_backend {
+            least_conn;
+            keepalive 32;
+            server bharatvoice-app-service:8000 max_fails=3 fail_timeout=30s;
+        }
+        
+        # Rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+    }
+  
+  # PostgreSQL optimization
+  postgresql-performance.conf: |
+    # Memory settings
+    shared_buffers = 512MB
+    effective_cache_size = 2GB
+    work_mem = 8MB
+    maintenance_work_mem = 128MB
+    
+    # Checkpoint settings
+    checkpoint_completion_target = 0.9
+    checkpoint_timeout = 10min
+    max_wal_size = 2GB
+    min_wal_size = 160MB
+    
+    # Connection settings
+    max_connections = 200
+    superuser_reserved_connections = 3
+    
+    # Query planner
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    
+    # WAL settings
+    wal_level = replica
+    wal_compression = on
+    wal_buffers = 16MB
+    
+    # Background writer
+    bgwriter_delay = 200ms
+    bgwriter_lru_maxpages = 100
+    bgwriter_lru_multiplier = 2.0
+    
+    # Autovacuum
+    autovacuum = on
+    autovacuum_max_workers = 3
+    autovacuum_naptime = 1min
+    autovacuum_vacuum_threshold = 50
+    autovacuum_analyze_threshold = 50
+    
+    # Logging for performance analysis
+    log_min_duration_statement = 1000
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+    log_temp_files = 0
+    
+    # Statistics
+    track_activities = on
+    track_counts = on
+    track_io_timing = on
+    track_functions = all
+    
+    # Parallel query
+    max_parallel_workers_per_gather = 2
+    max_parallel_workers = 8
+    max_parallel_maintenance_workers = 2
+  
+  # Redis optimization
+  redis-performance.conf: |
+    # Memory optimization
+    maxmemory 1gb
+    maxmemory-policy allkeys-lru
+    maxmemory-samples 5
+    
+    # Persistence optimization
+    save 900 1
+    save 300 10
+    save 60 10000
+    rdbcompression yes
+    rdbchecksum yes
+    
+    # AOF optimization
+    appendonly yes
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+    
+    # Network optimization
+    tcp-backlog 511
+    tcp-keepalive 300
+    timeout 0
+    
+    # Client optimization
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    
+    # Slow log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    
+    # Latency monitoring
+    latency-monitor-threshold 100
+    
+    # Hash optimization
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    
+    # List optimization
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    
+    # Set optimization
+    set-max-intset-entries 512
+    
+    # Sorted set optimization
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: load-testing-config
+  namespace: bharatvoice
+data:
+  k6-load-test.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+    import { Rate } from 'k6/metrics';
+    
+    // Custom metrics
+    const errorRate = new Rate('errors');
+    
+    export let options = {
+      stages: [
+        { duration: '2m', target: 100 }, // Ramp up to 100 users
+        { duration: '5m', target: 100 }, // Stay at 100 users
+        { duration: '2m', target: 200 }, // Ramp up to 200 users
+        { duration: '5m', target: 200 }, // Stay at 200 users
+        { duration: '2m', target: 300 }, // Ramp up to 300 users
+        { duration: '5m', target: 300 }, // Stay at 300 users
+        { duration: '2m', target: 0 },   // Ramp down to 0 users
+      ],
+      thresholds: {
+        http_req_duration: ['p(95)<2000'], // 95% of requests must complete below 2s
+        http_req_failed: ['rate<0.1'],     // Error rate must be below 10%
+        errors: ['rate<0.1'],              // Custom error rate
+      },
+    };
+    
+    const BASE_URL = 'https://api.bharatvoice.com';
+    
+    export default function () {
+      // Health check
+      let healthResponse = http.get(`${BASE_URL}/health/ready`);
+      check(healthResponse, {
+        'health check status is 200': (r) => r.status === 200,
+        'health check response time < 500ms': (r) => r.timings.duration < 500,
+      }) || errorRate.add(1);
+      
+      // Voice processing endpoint
+      let voicePayload = {
+        text: 'नमस्ते, मुझे दिल्ली से मुंबई की ट्रेन की जानकारी चाहिए',
+        language: 'hi-IN',
+        voice_settings: {
+          speed: 1.0,
+          pitch: 1.0
+        }
+      };
+      
+      let voiceResponse = http.post(`${BASE_URL}/api/voice/synthesize`, JSON.stringify(voicePayload), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      check(voiceResponse, {
+        'voice synthesis status is 200': (r) => r.status === 200,
+        'voice synthesis response time < 3s': (r) => r.timings.duration < 3000,
+      }) || errorRate.add(1);
+      
+      // Train information endpoint
+      let trainResponse = http.get(`${BASE_URL}/api/railways/trains?from=NDLS&to=CSTM&date=2024-12-01`);
+      check(trainResponse, {
+        'train info status is 200': (r) => r.status === 200,
+        'train info response time < 2s': (r) => r.timings.duration < 2000,
+      }) || errorRate.add(1);
+      
+      // Weather endpoint
+      let weatherResponse = http.get(`${BASE_URL}/api/weather/current?city=Delhi`);
+      check(weatherResponse, {
+        'weather status is 200': (r) => r.status === 200,
+        'weather response time < 1s': (r) => r.timings.duration < 1000,
+      }) || errorRate.add(1);
+      
+      sleep(1);
+    }
+  
+  artillery-load-test.yml: |
+    config:
+      target: 'https://api.bharatvoice.com'
+      phases:
+        - duration: 60
+          arrivalRate: 10
+          name: "Warm up"
+        - duration: 300
+          arrivalRate: 50
+          name: "Sustained load"
+        - duration: 120
+          arrivalRate: 100
+          name: "Peak load"
+      defaults:
+        headers:
+          Content-Type: 'application/json'
+      processor: "./load-test-functions.js"
+    
+    scenarios:
+      - name: "Health Check"
+        weight: 20
+        flow:
+          - get:
+              url: "/health/ready"
+              expect:
+                - statusCode: 200
+                - contentType: json
+      
+      - name: "Voice Synthesis"
+        weight: 30
+        flow:
+          - post:
+              url: "/api/voice/synthesize"
+              json:
+                text: "{{ generateRandomText() }}"
+                language: "{{ randomLanguage() }}"
+              expect:
+                - statusCode: 200
+      
+      - name: "Train Information"
+        weight: 25
+        flow:
+          - get:
+              url: "/api/railways/trains"
+              qs:
+                from: "{{ randomStation() }}"
+                to: "{{ randomStation() }}"
+                date: "{{ futureDate() }}"
+              expect:
+                - statusCode: 200
+      
+      - name: "Weather Information"
+        weight: 15
+        flow:
+          - get:
+              url: "/api/weather/current"
+              qs:
+                city: "{{ randomCity() }}"
+              expect:
+                - statusCode: 200
+      
+      - name: "Platform Integration"
+        weight: 10
+        flow:
+          - get:
+              url: "/api/platforms/food/restaurants"
+              qs:
+                location: "{{ randomLocation() }}"
+                cuisine: "{{ randomCuisine() }}"
+              expect:
+                - statusCode: 200
+  
+  load-test-functions.js: |
+    const cities = ['Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune', 'Ahmedabad'];
+    const stations = ['NDLS', 'CSTM', 'SBC', 'MAS', 'HWH', 'HYB', 'PUNE', 'ADI'];
+    const languages = ['hi-IN', 'en-IN', 'ta-IN', 'te-IN', 'bn-IN', 'gu-IN', 'mr-IN', 'kn-IN'];
+    const cuisines = ['North Indian', 'South Indian', 'Chinese', 'Italian', 'Fast Food', 'Street Food'];
+    
+    const texts = [
+      'नमस्ते, मुझे ट्रेन की जानकारी चाहिए',
+      'Hello, I need weather information',
+      'मुझे खाना ऑर्डर करना है',
+      'Can you book a cab for me?',
+      'आज का मौसम कैसा है?',
+      'I want to check train timings'
+    ];
+    
+    module.exports = {
+      generateRandomText: function() {
+        return texts[Math.floor(Math.random() * texts.length)];
+      },
+      
+      randomLanguage: function() {
+        return languages[Math.floor(Math.random() * languages.length)];
+      },
+      
+      randomCity: function() {
+        return cities[Math.floor(Math.random() * cities.length)];
+      },
+      
+      randomStation: function() {
+        return stations[Math.floor(Math.random() * stations.length)];
+      },
+      
+      randomCuisine: function() {
+        return cuisines[Math.floor(Math.random() * cuisines.length)];
+      },
+      
+      randomLocation: function() {
+        return `${Math.random() * 90},${Math.random() * 180}`;
+      },
+      
+      futureDate: function() {
+        const date = new Date();
+        date.setDate(date.getDate() + Math.floor(Math.random() * 30));
+        return date.toISOString().split('T')[0];
+      }
+    };
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: performance-load-test
+  namespace: bharatvoice
+spec:
+  schedule: "0 2 * * 0"  # Weekly on Sunday at 2 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: k6-load-test
+            image: grafana/k6:latest
+            command:
+            - k6
+            - run
+            - --out
+            - influxdb=http://influxdb:8086/k6
+            - /scripts/k6-load-test.js
+            volumeMounts:
+            - name: load-test-scripts
+              mountPath: /scripts
+            env:
+            - name: K6_INFLUXDB_ORGANIZATION
+              value: "bharatvoice"
+            - name: K6_INFLUXDB_BUCKET
+              value: "k6"
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          volumes:
+          - name: load-test-scripts
+            configMap:
+              name: load-testing-config
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cdn-config
+  namespace: bharatvoice
+data:
+  cloudflare-config.yaml: |
+    # CloudFlare CDN Configuration
+    zones:
+      - zone_id: "your-cloudflare-zone-id"
+        domain: "bharatvoice.com"
+        settings:
+          ssl: "full"
+          security_level: "medium"
+          cache_level: "aggressive"
+          browser_cache_ttl: 14400
+          always_online: "on"
+          development_mode: "off"
+          ipv6: "on"
+          websockets: "on"
+          opportunistic_encryption: "on"
+          pseudo_ipv4: "off"
+          ip_geolocation: "on"
+          email_obfuscation: "on"
+          server_side_exclude: "on"
+          hotlink_protection: "off"
+          rocket_loader: "on"
+          minify:
+            css: "on"
+            html: "on"
+            js: "on"
+          mobile_redirect:
+            status: "off"
+          mirage: "on"
+          polish: "lossless"
+    
+    page_rules:
+      - targets:
+          - "bharatvoice.com/api/voice/*"
+        actions:
+          cache_level: "bypass"
+          browser_cache_ttl: 0
+      - targets:
+          - "bharatvoice.com/static/*"
+        actions:
+          cache_level: "cache_everything"
+          browser_cache_ttl: 31536000
+          edge_cache_ttl: 31536000
+      - targets:
+          - "bharatvoice.com/api/health/*"
+        actions:
+          cache_level: "bypass"
+          browser_cache_ttl: 0
+    
+    firewall_rules:
+      - expression: '(http.request.uri.path contains "/admin" and ip.geoip.country ne "IN")'
+        action: "block"
+      - expression: '(http.request.method eq "POST" and rate(5m) > 100)'
+        action: "challenge"
+      - expression: '(http.user_agent contains "bot" and not http.user_agent contains "googlebot")'
+        action: "block"
+  
+  aws-cloudfront-config.yaml: |
+    # AWS CloudFront CDN Configuration
+    distributions:
+      - domain_name: "bharatvoice.com"
+        origins:
+          - domain_name: "api.bharatvoice.com"
+            origin_path: ""
+            custom_origin_config:
+              http_port: 80
+              https_port: 443
+              origin_protocol_policy: "https-only"
+              origin_ssl_protocols: ["TLSv1.2"]
+        
+        default_cache_behavior:
+          target_origin_id: "bharatvoice-api"
+          viewer_protocol_policy: "redirect-to-https"
+          allowed_methods: ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+          cached_methods: ["GET", "HEAD", "OPTIONS"]
+          compress: true
+          cache_policy_id: "managed-caching-optimized"
+          origin_request_policy_id: "managed-cors-s3-origin"
+          response_headers_policy_id: "managed-security-headers"
+        
+        cache_behaviors:
+          - path_pattern: "/api/voice/*"
+            target_origin_id: "bharatvoice-api"
+            viewer_protocol_policy: "https-only"
+            cache_policy_id: "managed-caching-disabled"
+            ttl:
+              default: 0
+              max: 0
+              min: 0
+          
+          - path_pattern: "/static/*"
+            target_origin_id: "bharatvoice-api"
+            viewer_protocol_policy: "https-only"
+            cache_policy_id: "managed-caching-optimized"
+            ttl:
+              default: 86400
+              max: 31536000
+              min: 0
+        
+        price_class: "PriceClass_All"
+        geo_restriction:
+          restriction_type: "none"
+        
+        web_acl_id: "arn:aws:wafv2:us-east-1:123456789012:global/webacl/bharatvoice-waf/12345678-1234-1234-1234-123456789012"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: performance-metrics
+  namespace: bharatvoice
+  labels:
+    app: performance-metrics
+spec:
+  selector:
+    app: bharatvoice-app
+  ports:
+  - port: 8001
+    targetPort: 8001
+    name: metrics
+  type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bharatvoice-performance
+  namespace: bharatvoice
+  labels:
+    app: bharatvoice-app
+spec:
+  selector:
+    matchLabels:
+      app: bharatvoice-app
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
     honorLabels: true

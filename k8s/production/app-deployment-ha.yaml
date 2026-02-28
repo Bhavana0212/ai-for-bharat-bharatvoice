@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # High Availability Application Deployment for Production
 apiVersion: v1
 kind: ConfigMap
@@ -393,4 +394,401 @@ subjects:
 roleRef:
   kind: Role
   name: bharatvoice-app-role
+=======
+# High Availability Application Deployment for Production
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bharatvoice-production-config
+  namespace: bharatvoice
+data:
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  WORKERS: "4"
+  
+  # Database configuration
+  DATABASE_POOL_SIZE: "20"
+  DATABASE_MAX_OVERFLOW: "30"
+  DATABASE_ECHO: "false"
+  
+  # Redis configuration
+  REDIS_MAX_CONNECTIONS: "50"
+  REDIS_SOCKET_TIMEOUT: "5.0"
+  
+  # Audio processing
+  AUDIO_SAMPLE_RATE: "16000"
+  AUDIO_CHUNK_SIZE: "1024"
+  AUDIO_MAX_LENGTH: "300"
+  AUDIO_NOISE_REDUCTION: "0.5"
+  
+  # Speech processing
+  WHISPER_MODEL: "base"
+  WHISPER_DEVICE: "cpu"
+  TTS_ENGINE: "gtts"
+  SPEECH_RECOGNITION_TIMEOUT: "30.0"
+  
+  # Feature flags
+  ENABLE_OFFLINE_MODE: "true"
+  ENABLE_CODE_SWITCHING: "true"
+  ENABLE_CULTURAL_CONTEXT: "true"
+  
+  # Monitoring
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "8001"
+  HEALTH_CHECK_INTERVAL: "30"
+  
+  # CORS
+  CORS_ORIGINS: "https://bharatvoice.com,https://admin.bharatvoice.com"
+  CORS_METHODS: "GET,POST,PUT,DELETE"
+  
+  # Timeouts and limits
+  CONNECTION_TIMEOUT: "10"
+  READ_TIMEOUT: "30"
+  TOTAL_TIMEOUT: "60"
+  DEFAULT_RATE_LIMIT_RPM: "60"
+  BURST_ALLOWANCE: "10"
+  CACHE_DEFAULT_TTL: "3600"
+  MAX_CACHE_SIZE: "100MB"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-shared-data-pvc
+  namespace: bharatvoice
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: shared-storage
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-models-pvc
+  namespace: bharatvoice
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: shared-storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bharatvoice-app
+  namespace: bharatvoice
+  labels:
+    app: bharatvoice-app
+    version: v1
+    tier: application
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: bharatvoice-app
+  template:
+    metadata:
+      labels:
+        app: bharatvoice-app
+        version: v1
+        tier: application
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+        config.linkerd.io/proxy-cpu-request: "0.1"
+        config.linkerd.io/proxy-memory-request: "20Mi"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - bharatvoice-app
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: bharatvoice-app
+        image: bharatvoice/assistant:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        - containerPort: 8001
+          name: metrics
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/0"
+        - name: REDIS_READ_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis-read-service:6379/0"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: bharatvoice-secrets
+              key: SECRET_KEY
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: bharatvoice-secrets
+              key: ENCRYPTION_KEY
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: bharatvoice-secrets
+              key: JWT_SECRET_KEY
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_DB
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: REDIS_PASSWORD
+        # External API keys
+        - name: INDIAN_RAILWAYS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: external-api-secrets
+              key: INDIAN_RAILWAYS_API_KEY
+              optional: true
+        - name: OPENWEATHERMAP_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: external-api-secrets
+              key: OPENWEATHERMAP_API_KEY
+              optional: true
+        - name: RAZORPAY_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: external-api-secrets
+              key: RAZORPAY_KEY_ID
+              optional: true
+        - name: RAZORPAY_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: external-api-secrets
+              key: RAZORPAY_KEY_SECRET
+              optional: true
+        - name: SWIGGY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: external-api-secrets
+              key: SWIGGY_API_KEY
+              optional: true
+        - name: OLA_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: external-api-secrets
+              key: OLA_CLIENT_ID
+              optional: true
+        - name: OLA_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: external-api-secrets
+              key: OLA_CLIENT_SECRET
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: bharatvoice-production-config
+        volumeMounts:
+        - name: app-shared-data
+          mountPath: /app/data
+        - name: app-models
+          mountPath: /app/models
+        - name: app-cache
+          mountPath: /app/cache
+        - name: app-logs
+          mountPath: /app/logs
+        - name: ssl-certs
+          mountPath: /etc/ssl/certs
+          readOnly: true
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+            ephemeral-storage: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        startupProbe:
+          httpGet:
+            path: /health/startup
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 60
+          successThreshold: 1
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: app-shared-data
+        persistentVolumeClaim:
+          claimName: app-shared-data-pvc
+      - name: app-models
+        persistentVolumeClaim:
+          claimName: app-models-pvc
+      - name: app-cache
+        emptyDir:
+          sizeLimit: 2Gi
+      - name: app-logs
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: ssl-certs
+        secret:
+          secretName: bharatvoice-ssl-certs
+      imagePullSecrets:
+      - name: bharatvoice-registry-secret
+      serviceAccountName: bharatvoice-app-sa
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bharatvoice-app-service
+  namespace: bharatvoice
+  labels:
+    app: bharatvoice-app
+    tier: application
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health/ready"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "5"
+    service.beta.kubernetes.io/aws-load-balancer-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-unhealthy-threshold: "3"
+spec:
+  selector:
+    app: bharatvoice-app
+  ports:
+  - port: 80
+    targetPort: 8000
+    name: http
+    protocol: TCP
+  - port: 8001
+    targetPort: 8001
+    name: metrics
+    protocol: TCP
+  type: LoadBalancer
+  sessionAffinity: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bharatvoice-app-headless
+  namespace: bharatvoice
+  labels:
+    app: bharatvoice-app
+    tier: application
+spec:
+  selector:
+    app: bharatvoice-app
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  - port: 8001
+    targetPort: 8001
+    name: metrics
+  clusterIP: None
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bharatvoice-app-sa
+  namespace: bharatvoice
+  labels:
+    app: bharatvoice-app
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: bharatvoice
+  name: bharatvoice-app-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bharatvoice-app-rolebinding
+  namespace: bharatvoice
+subjects:
+- kind: ServiceAccount
+  name: bharatvoice-app-sa
+  namespace: bharatvoice
+roleRef:
+  kind: Role
+  name: bharatvoice-app-role
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
   apiGroup: rbac.authorization.k8s.io

@@ -544,3 +544,11 @@ class TestAccessibilitySupport:
         
         if accessibility_manager.settings.volume_level == VolumeLevel.MUTE:
             assert "mute" in status.lower(), "Status should indicate muted state"
+
+
+# Run stateful tests
+TestAccessibilityStateMachine = AccessibilityTestStateMachine.TestCase
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

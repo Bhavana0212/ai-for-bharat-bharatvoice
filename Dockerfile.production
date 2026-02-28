@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Production-optimized multi-stage Dockerfile for BharatVoice Assistant
 
 # Build stage
@@ -89,4 +90,97 @@ CMD ["gunicorn", "bharatvoice.main:app", \
      "--access-logfile", "/app/logs/access.log", \
      "--error-logfile", "/app/logs/error.log", \
      "--log-level", "info", \
+=======
+# Production-optimized multi-stage Dockerfile for BharatVoice Assistant
+
+# Build stage
+FROM python:3.11-slim as builder
+
+# Set build environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy requirements and install Python dependencies
+WORKDIR /build
+COPY pyproject.toml ./
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-deps . && \
+    pip install --only-binary=all -r <(pip freeze)
+
+# Production stage
+FROM python:3.11-slim as production
+
+# Set production environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    ENVIRONMENT=production \
+    WORKERS=4 \
+    MAX_WORKERS=8 \
+    WORKER_CLASS=uvicorn.workers.UvicornWorker \
+    TIMEOUT=120 \
+    KEEPALIVE=5
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && groupadd -r bharatvoice --gid=1000 \
+    && useradd -r -g bharatvoice --uid=1000 --home-dir=/app --shell=/bin/bash bharatvoice
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Create application directories
+WORKDIR /app
+RUN mkdir -p /app/logs /app/data /app/cache /app/models && \
+    chown -R bharatvoice:bharatvoice /app
+
+# Copy application code
+COPY --chown=bharatvoice:bharatvoice src/ ./src/
+COPY --chown=bharatvoice:bharatvoice alembic/ ./alembic/
+COPY --chown=bharatvoice:bharatvoice alembic.ini ./
+COPY --chown=bharatvoice:bharatvoice .env.example .env
+
+# Switch to non-root user
+USER bharatvoice
+
+# Expose application port
+EXPOSE 8000
+
+# Health check with proper timeout and retries
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health/live || exit 1
+
+# Use gunicorn for production with proper worker management
+CMD ["gunicorn", "bharatvoice.main:app", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "${WORKERS}", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--timeout", "${TIMEOUT}", \
+     "--keepalive", "${KEEPALIVE}", \
+     "--worker-class", "${WORKER_CLASS}", \
+     "--access-logfile", "/app/logs/access.log", \
+     "--error-logfile", "/app/logs/error.log", \
+     "--log-level", "info", \
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
      "--preload"]

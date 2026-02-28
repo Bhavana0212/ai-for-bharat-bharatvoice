@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Backup and Disaster Recovery Configuration for Production
 apiVersion: v1
 kind: ConfigMap
@@ -423,4 +424,431 @@ spec:
         persistentVolumeClaim:
           claimName: backup-pvc
       restartPolicy: Never
+=======
+# Backup and Disaster Recovery Configuration for Production
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-scripts
+  namespace: bharatvoice
+data:
+  backup-database.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Configuration
+    BACKUP_DIR="/backups/database"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="bharatvoice_backup_${TIMESTAMP}.sql"
+    RETENTION_DAYS=30
+    
+    # Create backup directory
+    mkdir -p ${BACKUP_DIR}
+    
+    # Perform database backup
+    echo "Starting database backup at $(date)"
+    pg_dump -h postgres-service -U ${POSTGRES_USER} -d ${POSTGRES_DB} > ${BACKUP_DIR}/${BACKUP_FILE}
+    
+    # Compress backup
+    gzip ${BACKUP_DIR}/${BACKUP_FILE}
+    
+    # Upload to S3 (if configured)
+    if [ ! -z "${AWS_S3_BACKUP_BUCKET}" ]; then
+        aws s3 cp ${BACKUP_DIR}/${BACKUP_FILE}.gz s3://${AWS_S3_BACKUP_BUCKET}/database/
+        echo "Backup uploaded to S3: s3://${AWS_S3_BACKUP_BUCKET}/database/${BACKUP_FILE}.gz"
+    fi
+    
+    # Clean up old backups
+    find ${BACKUP_DIR} -name "bharatvoice_backup_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
+    
+    echo "Database backup completed successfully at $(date)"
+  
+  restore-database.sh: |
+    #!/bin/bash
+    set -e
+    
+    if [ -z "$1" ]; then
+        echo "Usage: $0 <backup_file>"
+        echo "Available backups:"
+        ls -la /backups/database/bharatvoice_backup_*.sql.gz
+        exit 1
+    fi
+    
+    BACKUP_FILE=$1
+    
+    # Check if backup file exists
+    if [ ! -f "${BACKUP_FILE}" ]; then
+        echo "Backup file not found: ${BACKUP_FILE}"
+        exit 1
+    fi
+    
+    # Confirm restoration
+    echo "WARNING: This will restore the database from backup and overwrite current data!"
+    echo "Backup file: ${BACKUP_FILE}"
+    echo "Target database: ${POSTGRES_DB} on postgres-service"
+    read -p "Are you sure you want to continue? (yes/no): " confirm
+    
+    if [ "$confirm" != "yes" ]; then
+        echo "Restoration cancelled."
+        exit 0
+    fi
+    
+    # Stop application pods to prevent connections
+    echo "Scaling down application pods..."
+    kubectl scale deployment bharatvoice-app --replicas=0 -n bharatvoice
+    
+    # Wait for pods to terminate
+    sleep 30
+    
+    # Drop and recreate database
+    echo "Dropping and recreating database..."
+    psql -h postgres-service -U ${POSTGRES_USER} -c "DROP DATABASE IF EXISTS ${POSTGRES_DB};"
+    psql -h postgres-service -U ${POSTGRES_USER} -c "CREATE DATABASE ${POSTGRES_DB};"
+    
+    # Restore from backup
+    echo "Restoring database from backup..."
+    if [[ ${BACKUP_FILE} == *.gz ]]; then
+        gunzip -c ${BACKUP_FILE} | psql -h postgres-service -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+    else
+        psql -h postgres-service -U ${POSTGRES_USER} -d ${POSTGRES_DB} < ${BACKUP_FILE}
+    fi
+    
+    # Scale up application pods
+    echo "Scaling up application pods..."
+    kubectl scale deployment bharatvoice-app --replicas=5 -n bharatvoice
+    
+    echo "Database restoration completed successfully at $(date)"
+  
+  backup-redis.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Configuration
+    BACKUP_DIR="/backups/redis"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="redis_backup_${TIMESTAMP}.rdb"
+    RETENTION_DAYS=7
+    
+    # Create backup directory
+    mkdir -p ${BACKUP_DIR}
+    
+    # Trigger Redis BGSAVE
+    echo "Starting Redis backup at $(date)"
+    redis-cli -h redis-service -a ${REDIS_PASSWORD} BGSAVE
+    
+    # Wait for backup to complete
+    while [ $(redis-cli -h redis-service -a ${REDIS_PASSWORD} LASTSAVE) -eq $(redis-cli -h redis-service -a ${REDIS_PASSWORD} LASTSAVE) ]; do
+        sleep 1
+    done
+    
+    # Copy RDB file
+    kubectl cp bharatvoice/redis-master-0:/data/dump.rdb ${BACKUP_DIR}/${BACKUP_FILE}
+    
+    # Compress backup
+    gzip ${BACKUP_DIR}/${BACKUP_FILE}
+    
+    # Upload to S3 (if configured)
+    if [ ! -z "${AWS_S3_BACKUP_BUCKET}" ]; then
+        aws s3 cp ${BACKUP_DIR}/${BACKUP_FILE}.gz s3://${AWS_S3_BACKUP_BUCKET}/redis/
+        echo "Redis backup uploaded to S3: s3://${AWS_S3_BACKUP_BUCKET}/redis/${BACKUP_FILE}.gz"
+    fi
+    
+    # Clean up old backups
+    find ${BACKUP_DIR} -name "redis_backup_*.rdb.gz" -mtime +${RETENTION_DAYS} -delete
+    
+    echo "Redis backup completed successfully at $(date)"
+  
+  disaster-recovery.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "=== BharatVoice Disaster Recovery Procedure ==="
+    echo "Starting disaster recovery at $(date)"
+    
+    # Check if this is a disaster recovery scenario
+    if [ "$1" != "--confirm-disaster-recovery" ]; then
+        echo "This script performs disaster recovery operations."
+        echo "It will:"
+        echo "1. Restore database from latest backup"
+        echo "2. Restore Redis from latest backup"
+        echo "3. Restart all application services"
+        echo "4. Verify system health"
+        echo ""
+        echo "To proceed, run: $0 --confirm-disaster-recovery"
+        exit 1
+    fi
+    
+    # Find latest database backup
+    LATEST_DB_BACKUP=$(ls -t /backups/database/bharatvoice_backup_*.sql.gz | head -1)
+    if [ -z "${LATEST_DB_BACKUP}" ]; then
+        echo "ERROR: No database backup found!"
+        exit 1
+    fi
+    
+    # Find latest Redis backup
+    LATEST_REDIS_BACKUP=$(ls -t /backups/redis/redis_backup_*.rdb.gz | head -1)
+    if [ -z "${LATEST_REDIS_BACKUP}" ]; then
+        echo "WARNING: No Redis backup found, skipping Redis restore"
+    fi
+    
+    echo "Using database backup: ${LATEST_DB_BACKUP}"
+    echo "Using Redis backup: ${LATEST_REDIS_BACKUP}"
+    
+    # Restore database
+    echo "Restoring database..."
+    ./restore-database.sh ${LATEST_DB_BACKUP}
+    
+    # Restore Redis (if backup available)
+    if [ ! -z "${LATEST_REDIS_BACKUP}" ]; then
+        echo "Restoring Redis..."
+        # Stop Redis pods
+        kubectl scale statefulset redis-master --replicas=0 -n bharatvoice
+        kubectl scale statefulset redis-replica --replicas=0 -n bharatvoice
+        sleep 30
+        
+        # Restore Redis data
+        gunzip -c ${LATEST_REDIS_BACKUP} > /tmp/dump.rdb
+        kubectl cp /tmp/dump.rdb bharatvoice/redis-master-0:/data/dump.rdb
+        
+        # Start Redis pods
+        kubectl scale statefulset redis-master --replicas=1 -n bharatvoice
+        kubectl scale statefulset redis-replica --replicas=2 -n bharatvoice
+        sleep 60
+    fi
+    
+    # Restart all services
+    echo "Restarting all services..."
+    kubectl rollout restart deployment bharatvoice-app -n bharatvoice
+    kubectl rollout restart statefulset postgres-primary -n bharatvoice
+    
+    # Wait for services to be ready
+    echo "Waiting for services to be ready..."
+    kubectl wait --for=condition=ready pod -l app=bharatvoice-app -n bharatvoice --timeout=300s
+    kubectl wait --for=condition=ready pod -l app=postgres,role=primary -n bharatvoice --timeout=300s
+    kubectl wait --for=condition=ready pod -l app=redis,role=master -n bharatvoice --timeout=300s
+    
+    # Verify system health
+    echo "Verifying system health..."
+    APP_HEALTH=$(kubectl get pods -l app=bharatvoice-app -n bharatvoice -o jsonpath='{.items[*].status.phase}')
+    DB_HEALTH=$(kubectl get pods -l app=postgres,role=primary -n bharatvoice -o jsonpath='{.items[*].status.phase}')
+    REDIS_HEALTH=$(kubectl get pods -l app=redis,role=master -n bharatvoice -o jsonpath='{.items[*].status.phase}')
+    
+    echo "Application pods: ${APP_HEALTH}"
+    echo "Database pods: ${DB_HEALTH}"
+    echo "Redis pods: ${REDIS_HEALTH}"
+    
+    # Test application endpoint
+    if kubectl exec -n bharatvoice deployment/bharatvoice-app -- curl -f http://localhost:8000/health/ready > /dev/null 2>&1; then
+        echo "✅ Application health check passed"
+    else
+        echo "❌ Application health check failed"
+        exit 1
+    fi
+    
+    echo "=== Disaster Recovery Completed Successfully ==="
+    echo "Completed at $(date)"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: database-backup
+  namespace: bharatvoice
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            command:
+            - /bin/bash
+            - /scripts/backup-database.sh
+            env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_DB
+            - name: AWS_S3_BACKUP_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: S3_BACKUP_BUCKET
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: true
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backups
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "200m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+          restartPolicy: OnFailure
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-backup
+  namespace: bharatvoice
+spec:
+  schedule: "0 6 * * *"  # Daily at 6 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: redis:7-alpine
+            command:
+            - /bin/bash
+            - /scripts/backup-redis.sh
+            env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_PASSWORD
+            - name: AWS_S3_BACKUP_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: S3_BACKUP_BUCKET
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: true
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backups
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "50m"
+              limits:
+                memory: "256Mi"
+                cpu: "100m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+  namespace: bharatvoice
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: standard
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: bharatvoice
+data:
+  S3_BACKUP_BUCKET: "bharatvoice-backups-prod"
+  BACKUP_RETENTION_DAYS: "30"
+  REDIS_BACKUP_RETENTION_DAYS: "7"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: disaster-recovery-test
+  namespace: bharatvoice
+spec:
+  template:
+    spec:
+      containers:
+      - name: dr-test
+        image: postgres:15-alpine
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Disaster Recovery Test - $(date)"
+          echo "This is a test job to validate disaster recovery procedures"
+          echo "In a real disaster recovery scenario, run the disaster-recovery.sh script"
+          echo "Available backups:"
+          ls -la /backups/database/ || echo "No database backups found"
+          ls -la /backups/redis/ || echo "No Redis backups found"
+          echo "Test completed successfully"
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backups
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: backup-pvc
+      restartPolicy: Never
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
   backoffLimit: 1

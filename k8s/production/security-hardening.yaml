@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Security Hardening Configuration for Production
 apiVersion: v1
 kind: ConfigMap
@@ -614,4 +615,622 @@ spec:
   resources:
     requests:
       storage: 50Gi
+=======
+# Security Hardening Configuration for Production
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-config
+  namespace: bharatvoice
+data:
+  # Security headers configuration
+  security-headers.conf: |
+    # Security Headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    
+    # Content Security Policy
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https:; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-ancestors 'none'; form-action 'self'; base-uri 'self';" always;
+    
+    # Hide server information
+    server_tokens off;
+    
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
+    limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+    
+  # Fail2ban configuration for rate limiting
+  fail2ban.conf: |
+    [DEFAULT]
+    bantime = 3600
+    findtime = 600
+    maxretry = 5
+    
+    [nginx-req-limit]
+    enabled = true
+    filter = nginx-req-limit
+    action = iptables-multiport[name=ReqLimit, port="http,https", protocol=tcp]
+    logpath = /var/log/nginx/error.log
+    maxretry = 10
+    
+    [nginx-login]
+    enabled = true
+    filter = nginx-login
+    action = iptables-multiport[name=NoLogin, port="http,https", protocol=tcp]
+    logpath = /var/log/nginx/access.log
+    maxretry = 3
+    bantime = 7200
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-policy
+  namespace: bharatvoice
+data:
+  audit-policy.yaml: |
+    apiVersion: audit.k8s.io/v1
+    kind: Policy
+    rules:
+    # Log all requests at the Metadata level for secrets, configmaps, and other sensitive resources
+    - level: Metadata
+      resources:
+      - group: ""
+        resources: ["secrets", "configmaps"]
+    
+    # Log all requests at the Request level for authentication and authorization
+    - level: Request
+      namespaces: ["bharatvoice", "monitoring"]
+      verbs: ["create", "update", "patch", "delete"]
+      resources:
+      - group: ""
+        resources: ["pods", "services", "persistentvolumeclaims"]
+      - group: "apps"
+        resources: ["deployments", "statefulsets"]
+    
+    # Log failed requests
+    - level: Request
+      omitStages:
+      - RequestReceived
+      resources:
+      - group: ""
+        resources: ["*"]
+      namespaces: ["bharatvoice", "monitoring"]
+      
+    # Don't log requests to certain non-resource URLs
+    - level: None
+      nonResourceURLs:
+      - /healthz*
+      - /version
+      - /swagger*
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: bharatvoice-psp
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  runAsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1000
+        max: 65535
+  seLinux:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+  readOnlyRootFilesystem: false
+  seccompProfile:
+    type: RuntimeDefault
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bharatvoice-psp-use
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs: ['use']
+  resourceNames:
+  - bharatvoice-psp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bharatvoice-psp-use
+roleRef:
+  kind: ClusterRole
+  name: bharatvoice-psp-use
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: bharatvoice-app-sa
+  namespace: bharatvoice
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bharatvoice-network-policy
+  namespace: bharatvoice
+spec:
+  podSelector:
+    matchLabels:
+      app: bharatvoice-app
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from nginx-ingress
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow ingress from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8001
+  # Allow ingress from same namespace (for health checks)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: bharatvoice
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 8001
+  egress:
+  # Allow egress to PostgreSQL
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow egress to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  # Allow HTTPS for external APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow HTTP for external APIs (if needed)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-network-policy
+  namespace: bharatvoice
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from application pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: bharatvoice-app
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow ingress from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9187
+  # Allow replication between postgres instances
+  - from:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  # Allow replication between postgres instances
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-network-policy
+  namespace: bharatvoice
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from application pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: bharatvoice-app
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow ingress from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9121
+  # Allow replication between redis instances
+  - from:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  # Allow replication between redis instances
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-scanner-config
+  namespace: bharatvoice
+data:
+  trivy-config.yaml: |
+    # Trivy security scanner configuration
+    cache:
+      dir: /tmp/trivy
+    db:
+      repository: ghcr.io/aquasecurity/trivy-db
+    vulnerability:
+      type:
+        - os
+        - library
+      severity:
+        - UNKNOWN
+        - LOW
+        - MEDIUM
+        - HIGH
+        - CRITICAL
+    secret:
+      config: /etc/trivy/secret.yaml
+    
+  secret-scan.yaml: |
+    # Secret scanning rules
+    rules:
+      - id: aws-access-key
+        description: AWS Access Key
+        regex: 'AKIA[0-9A-Z]{16}'
+        severity: HIGH
+      - id: aws-secret-key
+        description: AWS Secret Key
+        regex: '[0-9a-zA-Z/+]{40}'
+        severity: HIGH
+      - id: private-key
+        description: Private Key
+        regex: '-----BEGIN [A-Z]+ PRIVATE KEY-----'
+        severity: CRITICAL
+      - id: api-key
+        description: Generic API Key
+        regex: 'api[_-]?key["\s]*[:=]["\s]*[0-9a-zA-Z]{20,}'
+        severity: MEDIUM
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: security-scan
+  namespace: bharatvoice
+spec:
+  schedule: "0 2 * * 0"  # Weekly on Sunday at 2 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: trivy-scanner
+            image: aquasec/trivy:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting security scan at $(date)"
+              
+              # Scan application image
+              trivy image --format json --output /tmp/app-scan.json bharatvoice/assistant:latest
+              
+              # Scan for secrets in the cluster
+              trivy k8s --report summary cluster
+              
+              # Scan specific namespace
+              trivy k8s --report summary namespace/bharatvoice
+              
+              echo "Security scan completed at $(date)"
+            volumeMounts:
+            - name: trivy-cache
+              mountPath: /tmp/trivy
+            - name: security-config
+              mountPath: /etc/trivy
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          volumes:
+          - name: trivy-cache
+            emptyDir: {}
+          - name: security-config
+            configMap:
+              name: security-scanner-config
+          restartPolicy: OnFailure
+          serviceAccountName: security-scanner-sa
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: security-scanner-sa
+  namespace: bharatvoice
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: security-scanner-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: security-scanner-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: security-scanner-role
+subjects:
+- kind: ServiceAccount
+  name: security-scanner-sa
+  namespace: bharatvoice
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: compliance-config
+  namespace: bharatvoice
+data:
+  gdpr-compliance.yaml: |
+    # GDPR Compliance Configuration
+    data_retention:
+      user_data: 2555  # 7 years in days
+      voice_recordings: 90  # 90 days
+      logs: 365  # 1 year
+      analytics: 1095  # 3 years
+    
+    data_processing:
+      lawful_basis: "consent"
+      purpose_limitation: true
+      data_minimization: true
+      accuracy: true
+      storage_limitation: true
+      integrity_confidentiality: true
+      accountability: true
+    
+    user_rights:
+      access: true
+      rectification: true
+      erasure: true
+      restrict_processing: true
+      data_portability: true
+      object: true
+      automated_decision_making: false
+    
+    privacy_by_design:
+      default_privacy_settings: true
+      encryption_at_rest: true
+      encryption_in_transit: true
+      pseudonymization: true
+      anonymization: true
+  
+  indian_compliance.yaml: |
+    # Indian Data Protection Law Compliance
+    data_localization:
+      critical_personal_data: "india"
+      sensitive_personal_data: "india"
+      general_personal_data: "india_or_approved_countries"
+    
+    consent_management:
+      explicit_consent: true
+      granular_consent: true
+      withdrawal_mechanism: true
+      consent_logging: true
+    
+    data_fiduciary_obligations:
+      transparency: true
+      accountability: true
+      data_protection_impact_assessment: true
+      data_protection_officer: true
+      grievance_redressal: true
+    
+    breach_notification:
+      authority_notification_hours: 72
+      individual_notification_required: true
+      breach_register: true
+    
+    cross_border_transfer:
+      adequacy_decision: false
+      appropriate_safeguards: true
+      binding_corporate_rules: false
+      approved_certification: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: compliance-audit
+  namespace: bharatvoice
+spec:
+  schedule: "0 1 1 * *"  # Monthly on 1st at 1 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: compliance-auditor
+            image: bharatvoice/compliance-auditor:latest
+            command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Starting compliance audit at $(date)"
+              
+              # Check data retention policies
+              echo "Checking data retention policies..."
+              
+              # Check encryption status
+              echo "Verifying encryption status..."
+              
+              # Check access logs
+              echo "Auditing access logs..."
+              
+              # Generate compliance report
+              echo "Generating compliance report..."
+              
+              echo "Compliance audit completed at $(date)"
+            env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_DB
+            volumeMounts:
+            - name: compliance-config
+              mountPath: /etc/compliance
+            - name: audit-logs
+              mountPath: /var/log/audit
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "200m"
+          volumes:
+          - name: compliance-config
+            configMap:
+              name: compliance-config
+          - name: audit-logs
+            persistentVolumeClaim:
+              claimName: audit-logs-pvc
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audit-logs-pvc
+  namespace: bharatvoice
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
   storageClassName: standard

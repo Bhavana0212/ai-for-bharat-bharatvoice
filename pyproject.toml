@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -167,4 +168,175 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
+=======
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bharatvoice-assistant"
+version = "0.1.0"
+description = "AI-powered multilingual voice assistant for the Indian market"
+authors = [
+    {name = "BharatVoice Team", email = "team@bharatvoice.ai"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    # FastAPI and web framework
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    
+    # Audio processing
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "librosa>=0.10.0",
+    "soundfile>=0.12.0",
+    "webrtcvad>=2.0.10",
+    
+    # Speech recognition and synthesis
+    "openai-whisper>=20231117",
+    "gtts>=2.4.0",
+    "pydub>=0.25.0",
+    
+    # Machine learning and NLP
+    "torch>=2.1.0",
+    "transformers>=4.35.0",
+    "sentence-transformers>=2.2.0",
+    "langdetect>=1.0.9",
+    
+    # Database and caching
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "redis>=5.0.0",
+    "aiosqlite>=0.19.0",
+    
+    # HTTP client and external integrations
+    "httpx>=0.25.0",
+    "aiofiles>=23.2.0",
+    
+    # Security and encryption
+    "cryptography>=41.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pyjwt>=2.8.0",
+    "bcrypt>=4.1.0",
+    "pyotp>=2.9.0",
+    "qrcode[pil]>=7.4.0",
+    
+    # Monitoring and logging
+    "structlog>=23.2.0",
+    "prometheus-client>=0.19.0",
+    
+    # Configuration and environment
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "hypothesis>=6.88.0",
+    
+    # Code quality
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "mypy>=1.7.0",
+    
+    # Development tools
+    "pre-commit>=3.5.0",
+    "ipython>=8.17.0",
+    "jupyter>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bharatvoice/assistant"
+Documentation = "https://docs.bharatvoice.ai"
+Repository = "https://github.com/bharatvoice/assistant.git"
+Issues = "https://github.com/bharatvoice/assistant/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["bharatvoice"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "property: Property-based tests",
+    "slow: Slow running tests",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
 ]

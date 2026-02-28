@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 apiVersion: 1
 
 providers:
@@ -9,4 +10,17 @@ providers:
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
+=======
+apiVersion: 1
+
+providers:
+  - name: 'default'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
       path: /etc/grafana/provisioning/dashboards/json

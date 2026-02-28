@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -35,4 +36,43 @@ spec:
     defaultRequest:
       cpu: "100m"
       memory: "256Mi"
+=======
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bharatvoice
+  labels:
+    name: bharatvoice
+    environment: production
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: bharatvoice-quota
+  namespace: bharatvoice
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    persistentvolumeclaims: "10"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: bharatvoice-limits
+  namespace: bharatvoice
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: "2Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "256Mi"
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
     type: Container

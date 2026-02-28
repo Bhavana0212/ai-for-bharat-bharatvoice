@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 apiVersion: 1
 
 datasources:
@@ -31,4 +32,39 @@ datasources:
     url: http://alertmanager:9093
     editable: true
     jsonData:
+=======
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "15s"
+      queryTimeout: "60s"
+      httpMethod: "POST"
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: prometheus
+          matcherRegex: "trace_id=(\\w+)"
+          name: "TraceID"
+          url: "$${__value.raw}"
+
+  - name: AlertManager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: true
+    jsonData:
+>>>>>>> 0eb0e95caee35c9eb86ecf88b155e812550321aa
       implementation: "prometheus"
