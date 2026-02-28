@@ -1,0 +1,43 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bharatvoice-app-pdb
+  namespace: bharatvoice
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: bharatvoice-app
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bharatvoice-worker-pdb
+  namespace: bharatvoice
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: bharatvoice-worker
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nginx-pdb
+  namespace: bharatvoice
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: nginx
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-pdb
+  namespace: bharatvoice
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: redis

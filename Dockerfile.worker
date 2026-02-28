@@ -1,0 +1,47 @@
+# Specialized worker container for background tasks
+
+FROM python:3.11-slim as worker
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    WORKER_TYPE=background \
+    CELERY_BROKER_URL=redis://redis:6379/1 \
+    CELERY_RESULT_BACKEND=redis://redis:6379/2
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r worker --gid=1001 \
+    && useradd -r -g worker --uid=1001 --home-dir=/app --shell=/bin/bash worker
+
+# Install Python dependencies
+WORKDIR /app
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir . celery[redis]
+
+# Copy application code
+COPY --chown=worker:worker src/ ./src/
+COPY --chown=worker:worker .env.example .env
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/cache && \
+    chown -R worker:worker /app
+
+# Switch to non-root user
+USER worker
+
+# Health check for worker
+HEALTHCHECK --interval=60s --timeout=30s --start-period=120s --retries=3 \
+    CMD celery -A bharatvoice.worker inspect ping || exit 1
+
+# Run Celery worker
+CMD ["celery", "-A", "bharatvoice.worker", "worker", \
+     "--loglevel=info", \
+     "--concurrency=2", \
+     "--max-tasks-per-child=1000", \
+     "--logfile=/app/logs/worker.log"]

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: bharatvoice-streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - DEBUG=${DEBUG:-false}
+      - CACHE_TTL=${CACHE_TTL:-3600}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+    volumes:
+      - ./.streamlit_cache:/app/.streamlit_cache
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - bharatvoice-network
+
+  backend:
+    image: bharatvoice-backend:latest
+    container_name: bharatvoice-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./bharatvoice.db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    restart: unless-stopped
+    networks:
+      - bharatvoice-network
+
+networks:
+  bharatvoice-network:
+    driver: bridge

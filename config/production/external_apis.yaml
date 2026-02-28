@@ -1,0 +1,247 @@
+# Production External API Configuration for BharatVoice Assistant
+# This file contains configuration for all external service integrations
+
+# Indian Railways API Configuration
+indian_railways:
+  # Primary API provider
+  primary_provider: "railwayapi"
+  api_key: "${INDIAN_RAILWAYS_API_KEY}"
+  base_url: "https://indianrailapi.com/api/v2"
+  
+  # Fallback providers
+  fallback_providers:
+    - name: "irctc_connect"
+      api_key: "${IRCTC_CONNECT_API_KEY}"
+      base_url: "https://www.irctcconnect.com/api"
+    - name: "confirmtkt"
+      api_key: "${CONFIRMTKT_API_KEY}"
+      base_url: "https://api.confirmtkt.com/api/platform"
+  
+  # Rate limiting and retry configuration
+  rate_limit:
+    requests_per_minute: 100
+    burst_limit: 20
+  
+  retry_config:
+    max_retries: 3
+    backoff_factor: 2
+    timeout_seconds: 30
+  
+  # Caching configuration
+  cache:
+    train_schedules_ttl: 3600  # 1 hour
+    station_info_ttl: 86400    # 24 hours
+    pnr_status_ttl: 300        # 5 minutes
+
+# Weather Services Configuration
+weather_services:
+  # Primary weather provider
+  primary_provider: "openweathermap"
+  openweathermap:
+    api_key: "${OPENWEATHERMAP_API_KEY}"
+    base_url: "https://api.openweathermap.org/data/2.5"
+    
+  # Indian Meteorological Department
+  imd:
+    api_key: "${IMD_API_KEY}"
+    base_url: "https://mausam.imd.gov.in/api"
+    
+  # AccuWeather for premium features
+  accuweather:
+    api_key: "${ACCUWEATHER_API_KEY}"
+    base_url: "https://dataservice.accuweather.com"
+    
+  # Weather Underground for hyperlocal data
+  weather_underground:
+    api_key: "${WEATHER_UNDERGROUND_API_KEY}"
+    base_url: "https://api.weather.com/v1"
+  
+  # Configuration
+  cache_ttl: 1800  # 30 minutes
+  forecast_days: 7
+  include_air_quality: true
+  include_monsoon_data: true
+
+# Digital India Platform Configuration
+digital_india:
+  # API Gateway configuration
+  api_gateway:
+    base_url: "https://api.digitalindia.gov.in/v1"
+    api_key: "${DIGITAL_INDIA_API_KEY}"
+    client_id: "${DIGITAL_INDIA_CLIENT_ID}"
+    client_secret: "${DIGITAL_INDIA_CLIENT_SECRET}"
+  
+  # Service-specific endpoints
+  services:
+    aadhaar:
+      verification_url: "https://resident.uidai.gov.in/verify"
+      api_key: "${AADHAAR_VERIFICATION_API_KEY}"
+    
+    pan:
+      verification_url: "https://www.incometaxindiaefiling.gov.in/api"
+      api_key: "${PAN_VERIFICATION_API_KEY}"
+    
+    passport:
+      status_url: "https://passportindia.gov.in/AppOnlineProject/api"
+      api_key: "${PASSPORT_API_KEY}"
+    
+    driving_license:
+      verification_url: "https://parivahan.gov.in/rcdlstatus/api"
+      api_key: "${DRIVING_LICENSE_API_KEY}"
+  
+  # Compliance and security
+  data_localization: true
+  audit_logging: true
+  encryption_required: true
+
+# UPI Payment Gateway Configuration
+upi_payment:
+  # Primary UPI gateway
+  primary_gateway: "razorpay"
+  
+  # Razorpay configuration
+  razorpay:
+    key_id: "${RAZORPAY_KEY_ID}"
+    key_secret: "${RAZORPAY_KEY_SECRET}"
+    webhook_secret: "${RAZORPAY_WEBHOOK_SECRET}"
+    base_url: "https://api.razorpay.com/v1"
+    
+  # PayU configuration (fallback)
+  payu:
+    merchant_key: "${PAYU_MERCHANT_KEY}"
+    merchant_salt: "${PAYU_MERCHANT_SALT}"
+    base_url: "https://secure.payu.in/_payment"
+    
+  # Paytm configuration
+  paytm:
+    merchant_id: "${PAYTM_MERCHANT_ID}"
+    merchant_key: "${PAYTM_MERCHANT_KEY}"
+    base_url: "https://securegw.paytm.in/theia/api/v1"
+  
+  # Payment limits and security
+  limits:
+    min_amount: 1.00
+    max_amount: 100000.00
+    daily_limit: 200000.00
+    mfa_threshold: 5000.00
+  
+  security:
+    encryption_algorithm: "AES-256-GCM"
+    token_expiry_minutes: 15
+    webhook_verification: true
+
+# Platform Integration Configuration
+platform_integrations:
+  # Food delivery platforms
+  food_delivery:
+    swiggy:
+      partner_id: "${SWIGGY_PARTNER_ID}"
+      api_key: "${SWIGGY_API_KEY}"
+      base_url: "https://partner-api.swiggy.com/v1"
+      webhook_url: "${SWIGGY_WEBHOOK_URL}"
+      
+    zomato:
+      partner_id: "${ZOMATO_PARTNER_ID}"
+      api_key: "${ZOMATO_API_KEY}"
+      base_url: "https://developers.zomato.com/api/v2.1"
+      
+    uber_eats:
+      client_id: "${UBER_EATS_CLIENT_ID}"
+      client_secret: "${UBER_EATS_CLIENT_SECRET}"
+      base_url: "https://api.uber.com/v1/eats"
+  
+  # Ride sharing platforms
+  ride_sharing:
+    ola:
+      client_id: "${OLA_CLIENT_ID}"
+      client_secret: "${OLA_CLIENT_SECRET}"
+      base_url: "https://devapi.olacabs.com/v1"
+      
+    uber:
+      client_id: "${UBER_CLIENT_ID}"
+      client_secret: "${UBER_CLIENT_SECRET}"
+      base_url: "https://api.uber.com/v1.2"
+      
+    rapido:
+      api_key: "${RAPIDO_API_KEY}"
+      base_url: "https://api.rapido.bike/v1"
+  
+  # Service booking platforms
+  service_booking:
+    urban_company:
+      partner_id: "${URBAN_COMPANY_PARTNER_ID}"
+      api_key: "${URBAN_COMPANY_API_KEY}"
+      base_url: "https://partner-api.urbancompany.com/v1"
+      
+    justdial:
+      api_key: "${JUSTDIAL_API_KEY}"
+      base_url: "https://api.justdial.com/v1"
+
+# Cricket and Entertainment APIs
+entertainment:
+  cricket:
+    cricapi:
+      api_key: "${CRICAPI_API_KEY}"
+      base_url: "https://cricapi.com/api"
+      
+    espncricinfo:
+      api_key: "${ESPN_CRICINFO_API_KEY}"
+      base_url: "https://hs-consumer-api.espncricinfo.com/v1"
+  
+  bollywood:
+    news_api:
+      api_key: "${NEWS_API_KEY}"
+      base_url: "https://newsapi.org/v2"
+      sources: "bollywood-hungama,filmfare,pinkvilla"
+      
+    tmdb:
+      api_key: "${TMDB_API_KEY}"
+      base_url: "https://api.themoviedb.org/3"
+
+# Global Configuration
+global_config:
+  # Request timeout settings
+  timeouts:
+    connection_timeout: 10
+    read_timeout: 30
+    total_timeout: 60
+  
+  # Retry configuration
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+    retry_on_status: [429, 500, 502, 503, 504]
+  
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    default_rpm: 60  # requests per minute
+    burst_allowance: 10
+  
+  # Caching
+  caching:
+    enabled: true
+    default_ttl: 3600
+    max_cache_size: "100MB"
+  
+  # Monitoring and logging
+  monitoring:
+    enable_metrics: true
+    log_requests: true
+    log_responses: false  # Don't log sensitive data
+    alert_on_failures: true
+    failure_threshold: 5  # Alert after 5 consecutive failures
+  
+  # Security
+  security:
+    encrypt_api_keys: true
+    mask_sensitive_logs: true
+    validate_ssl_certificates: true
+    allowed_domains:
+      - "*.gov.in"
+      - "*.razorpay.com"
+      - "*.payu.in"
+      - "*.swiggy.com"
+      - "*.zomato.com"
+      - "*.uber.com"
+      - "*.olacabs.com"
