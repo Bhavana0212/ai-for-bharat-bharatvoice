@@ -10,7 +10,7 @@ License: MIT
 """
 
 import streamlit as st
-import requests
+import backend as backend_module
 import os
 import time
 import logging
@@ -439,361 +439,16 @@ def validate_language_code(language_code: str) -> bool:
     return language_code in allowed_languages
 
 
-class BharatVoiceAPIClient:
-    """API client for BharatVoice backend services
-    
-    This class provides a unified interface for communicating with the
-    BharatVoice backend API. It handles connection pooling, request
-    construction, and maintains round-trip data consistency.
-    
-    Requirements: 11.2, 12.5
-    
-    Attributes:
-        base_url: Base URL of the backend API
-        timeout: Request timeout in seconds
-        session: Requests session for connection pooling
-    
-    Examples:
-        >>> client = BharatVoiceAPIClient(
-        ...     base_url='http://localhost:8000',
-        ...     timeout=30
-        ... )
-        >>> # Use client methods for API calls
-    """
-    
-    def __init__(self, base_url: str, timeout: int = 30):
-        """Initialize API client with configuration
-        
-        Creates a new API client instance with the specified base URL
-        and timeout. Initializes a requests session for connection pooling
-        to improve performance for multiple API calls.
-        
-        Args:
-            base_url: Base URL of the backend API (e.g., 'http://localhost:8000')
-            timeout: Request timeout in seconds (default: 30)
-        
-        Requirements: 11.2, 12.5
-        
-        Examples:
-            >>> # Initialize with environment variables
-            >>> client = BharatVoiceAPIClient(
-            ...     base_url=os.getenv('BACKEND_URL', 'http://localhost:8000'),
-            ...     timeout=int(os.getenv('REQUEST_TIMEOUT', '30'))
-            ... )
-        """
-        self.base_url = base_url.rstrip('/')  # Remove trailing slash if present
-        self.timeout = timeout
-        self.session = requests.Session()  # Connection pooling for better performance
-    
-    def recognize_speech(self, audio_data: bytes, language: str, 
-                        enable_code_switching: bool = True) -> dict:
-        """Send audio for speech recognition
-        
-        Sends audio file to the backend API for speech-to-text transcription
-        using multipart/form-data encoding. Parses and returns the transcription
-        response with error handling for network and API errors.
-        
-        Args:
-            audio_data: Audio file bytes
-            language: ISO language code (e.g., 'hi', 'en-IN')
-            enable_code_switching: Enable code-switching detection (default: True)
-        
-        Returns:
-            Dictionary containing transcription results with structure:
-            {
-                'request_id': str,
-                'result': {
-                    'transcribed_text': str,
-                    'confidence': float,
-                    'detected_language': str,
-                    'code_switching_points': List[Dict],
-                    'alternative_transcriptions': List[str],
-                    'processing_time': float
-                },
-                'processing_time': float
-            }
-        
-        Raises:
-            requests.exceptions.Timeout: If request exceeds timeout
-            requests.exceptions.ConnectionError: If cannot connect to backend
-            requests.exceptions.HTTPError: If API returns error status code
-        
-        Requirements: 3.1, 12.1, 12.2
-        
-        Examples:
-            >>> client = BharatVoiceAPIClient('http://localhost:8000')
-            >>> with open('audio.wav', 'rb') as f:
-            ...     audio_data = f.read()
-            >>> result = client.recognize_speech(audio_data, 'hi')
-            >>> print(result['result']['transcribed_text'])
-        """
-        # Construct endpoint URL
-        url = f"{self.base_url}/api/voice/recognize"
-        
-        # Prepare multipart/form-data file upload
-        files = {
-            'audio_file': ('audio.wav', audio_data, 'audio/wav')
-        }
-        
-        # Prepare form data parameters
-        data = {
-            'language': language,
-            'enable_code_switching': enable_code_switching
-        }
-        
-        # Send POST request with multipart/form-data
-        response = self.session.post(
-            url,
-            files=files,
-            data=data,
-            timeout=self.timeout
-        )
-        
-        # Raise exception for HTTP error status codes
-        response.raise_for_status()
-        
-        # Parse and return JSON response
-        return response.json()
-    
-    def generate_response(self, text: str, language: str, 
-                         context: Optional[dict] = None) -> dict:
-        """Generate AI response from text
-        
-        Sends transcribed text to the backend API for AI response generation
-        using JSON payload. Parses and returns the AI response with error
-        handling for network and API errors.
-        
-        Args:
-            text: Transcribed text to generate response for
-            language: ISO language code (e.g., 'hi', 'en-IN')
-            context: Optional context dictionary for response generation
-                    (e.g., user preferences, conversation history)
-        
-        Returns:
-            Dictionary containing AI response with structure:
-            {
-                'request_id': str,
-                'text': str,
-                'language': str,
-                'suggested_actions': Optional[List[Dict]],
-                'processing_time': float
-            }
-        
-        Raises:
-            requests.exceptions.Timeout: If request exceeds timeout
-            requests.exceptions.ConnectionError: If cannot connect to backend
-            requests.exceptions.HTTPError: If API returns error status code
-        
-        Requirements: 4.1, 12.2
-        
-        Examples:
-            >>> client = BharatVoiceAPIClient('http://localhost:8000')
-            >>> result = client.generate_response(
-            ...     text="मौसम कैसा है?",
-            ...     language='hi'
-            ... )
-            >>> print(result['text'])
-        """
-        # Construct endpoint URL
-        url = f"{self.base_url}/api/response/generate"
-        
-        # Prepare JSON payload
-        payload = {
-            'text': text,
-            'language': language
-        }
-        
-        # Add optional context if provided
-        if context is not None:
-            payload['context'] = context
-        
-        # Set JSON content type header
-        headers = {
-            'Content-Type': 'application/json'
-        }
-        
-        # Send POST request with JSON payload
-        response = self.session.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=self.timeout
-        )
-        
-        # Raise exception for HTTP error status codes
-        response.raise_for_status()
-        
-        # Parse and return JSON response
-        return response.json()
-    
-    def synthesize_speech(self, text: str, language: str, 
-                         accent: str = 'standard', speed: float = 1.0,
-                         pitch: float = 1.0) -> bytes:
-        """Generate TTS audio from text
-
-        Sends text to the backend API for text-to-speech synthesis using
-        JSON payload. Fetches the audio file from the returned audio_url
-        and handles base64 decoding if needed.
-
-        Args:
-            text: Text to convert to speech
-            language: ISO language code (e.g., 'hi', 'en-IN')
-            accent: Voice accent (default: 'standard')
-            speed: Speech speed multiplier (default: 1.0)
-            pitch: Speech pitch multiplier (default: 1.0)
-
-        Returns:
-            Audio file bytes (decoded from base64 if needed)
-
-        Raises:
-            requests.exceptions.Timeout: If request exceeds timeout
-            requests.exceptions.ConnectionError: If cannot connect to backend
-            requests.exceptions.HTTPError: If API returns error status code
-
-        Requirements: 5.1, 12.3
-
-        Examples:
-            >>> client = BharatVoiceAPIClient('http://localhost:8000')
-            >>> audio_bytes = client.synthesize_speech(
-            ...     text="नमस्ते",
-            ...     language='hi'
-            ... )
-            >>> with open('output.wav', 'wb') as f:
-            ...     f.write(audio_bytes)
-        """
-        # Construct endpoint URL
-        url = f"{self.base_url}/api/voice/synthesize"
-
-        # Prepare JSON payload
-        payload = {
-            'text': text,
-            'language': language,
-            'accent': accent,
-            'speed': speed,
-            'pitch': pitch
-        }
-
-        # Set JSON content type header
-        headers = {
-            'Content-Type': 'application/json'
-        }
-
-        # Send POST request with JSON payload
-        response = self.session.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=self.timeout
-        )
-
-        # Raise exception for HTTP error status codes
-        response.raise_for_status()
-
-        # Parse JSON response to get audio_url
-        result = response.json()
-        audio_url = result.get('audio_url')
-
-        if not audio_url:
-            raise ValueError("Response missing 'audio_url' field")
-
-        # Fetch audio file from the audio_url
-        # Handle both relative and absolute URLs
-        if audio_url.startswith('http'):
-            audio_fetch_url = audio_url
-        else:
-            audio_fetch_url = f"{self.base_url}{audio_url}"
-
-        audio_response = self.session.get(
-            audio_fetch_url,
-            timeout=self.timeout
-        )
-
-        # Raise exception for HTTP error status codes
-        audio_response.raise_for_status()
-
-        # Get audio content
-        audio_data = audio_response.content
-
-        # Handle base64 decoding if needed
-        # Check if content is base64-encoded by attempting to decode
-        try:
-            # Check if response is JSON with base64 data
-            if audio_response.headers.get('Content-Type', '').startswith('application/json'):
-                json_data = audio_response.json()
-                if 'audio_data' in json_data:
-                    import base64
-                    audio_data = base64.b64decode(json_data['audio_data'])
-            # Check if content looks like base64 (text-based)
-            elif audio_response.headers.get('Content-Type', '').startswith('text/'):
-                import base64
-                audio_data = base64.b64decode(audio_data)
-        except Exception:
-            # If decoding fails, assume it's already binary audio data
-            pass
-
-        return audio_data
-
-    
-    def check_health(self) -> bool:
-        """Check backend health status
-        
-        Pings the /api/health endpoint to verify backend availability.
-        Uses a shorter timeout (5 seconds) for quick health checks.
-        
-        Returns:
-            True if backend is reachable (status code 200), False otherwise
-            (for any exception including timeout, connection error, HTTP error)
-        
-        Requirements: 7.1
-        
-        Examples:
-            >>> client = BharatVoiceAPIClient('http://localhost:8000')
-            >>> if client.check_health():
-            ...     print("Backend is online")
-            ... else:
-            ...     print("Backend is offline")
-        """
-        try:
-            # Construct health check endpoint URL
-            url = f"{self.base_url}/api/health"
-            
-            # Send GET request with shorter timeout (5 seconds)
-            response = self.session.get(url, timeout=5)
-            
-            # Return True only if status code is 200
-            return response.status_code == 200
-        
-        except Exception:
-            # Return False for any exception (timeout, connection error, etc.)
-            return False
-
-
 def check_backend_health() -> bool:
-    """Check if backend is reachable
-    
-    Pings the /api/health endpoint to verify backend availability.
-    Uses a shorter timeout (5 seconds) for quick health checks.
-    
-    Returns:
-        True if backend is reachable (status code 200), False otherwise
-    
-    Requirements: 7.1, 7.3
-    
-    Examples:
-        >>> if check_backend_health():
-        ...     print("Backend is online")
-        ... else:
-        ...     print("Backend is offline")
+    """In-process health check for the local backend (always True).
+
+    Streamlit Cloud runs the app in a single process, so the in-process
+    backend functions are available without network calls.
     """
     try:
-        response = requests.get(
-            f"{BACKEND_URL}/api/health",
-            timeout=5
-        )
-        return response.status_code == 200
-    
+        return backend_module.health_check()
     except Exception:
-        return False
+        return True
 
 
 def update_connection_status():
@@ -1167,55 +822,8 @@ def render_voice_recorder():
     return None
 
 
-def handle_network_error(error: Exception, operation: str):
-    """Handle network-related errors
-    
-    Displays user-friendly error messages for network issues including
-    timeouts and connection errors. Provides retry options and switches
-    to offline mode when appropriate.
-    
-    Args:
-        error: The exception that occurred (Timeout, ConnectionError, etc.)
-        operation: Name of the operation that failed (e.g., 'transcription', 'TTS')
-    
-    Requirements: 10.1
-    
-    Examples:
-        >>> try:
-        ...     response = requests.get(url, timeout=5)
-        ... except requests.exceptions.Timeout as e:
-        ...     handle_network_error(e, 'transcription')
-    """
-    error_message = f"Network error during {operation}"
-    
-    if isinstance(error, requests.exceptions.Timeout):
-        st.error(
-            f"⏱️ **Request timed out** / **अनुरोध समय समाप्त**\n\n"
-            f"The server is taking too long to respond for {operation}.\n\n"
-            f"सर्वर {operation} के लिए प्रतिक्रिया देने में बहुत समय ले रहा है।"
-        )
-        
-        if st.button(f"Retry {operation} / पुनः प्रयास करें", key=f"retry_{operation}_{time.time()}"):
-            st.rerun()
-    
-    elif isinstance(error, requests.exceptions.ConnectionError):
-        st.error(
-            f"🔌 **Cannot connect to backend** / **बैकएंड से कनेक्ट नहीं हो सकता**\n\n"
-            f"Please check your internet connection.\n\n"
-            f"कृपया अपना इंटरनेट कनेक्शन जांचें।"
-        )
-        
-        # Switch to offline mode
-        st.session_state.is_online = False
-        
-        if st.button("Retry Connection / कनेक्शन पुनः प्रयास करें", key=f"retry_conn_{time.time()}"):
-            update_connection_status()
-            st.rerun()
-    
-    else:
-        st.error(f"❌ {error_message}: {str(error)}")
-    
-    log_action(operation, 'error', str(error))
+# network-related error handling functions removed because all backend
+# calls are now in-process. Exceptions are handled inline where they occur.
 
 
 def handle_validation_error(error: str, field: str):
@@ -1281,170 +889,9 @@ def handle_validation_error(error: str, field: str):
     log_action('validation', 'error', f"{field}: {error}")
 
 
-def handle_api_error(response: requests.Response, operation: str):
-    """Handle API error responses
-    
-    Parses HTTP error responses and displays user-friendly error messages
-    based on status codes. Provides appropriate recovery options.
-    
-    Args:
-        response: The HTTP response object with error status
-        operation: Name of the operation that failed
-    
-    Requirements: 10.3, 10.5
-    
-    Examples:
-        >>> response = requests.post(url, data=data)
-        >>> if not response.ok:
-        ...     handle_api_error(response, 'transcription')
-    """
-    status_code = response.status_code
-    
-    if status_code == 400:
-        try:
-            error_data = response.json()
-            detail = error_data.get('detail', 'Invalid request')
-        except:
-            detail = 'Invalid request'
-        
-        st.error(f"❌ **Invalid request** / **अमान्य अनुरोध**: {detail}")
-    
-    elif status_code == 401:
-        st.error("🔒 **Authentication required** / **प्रमाणीकरण आवश्यक**\n\nPlease log in. / कृपया लॉग इन करें।")
-    
-    elif status_code == 403:
-        st.error("🚫 **Access denied** / **पहुंच अस्वीकृत**\n\nYou don't have permission for this operation. / आपके पास इस संचालन की अनुमति नहीं है।")
-    
-    elif status_code == 404:
-        st.error("🔍 **Resource not found** / **संसाधन नहीं मिला**\n\nThe requested endpoint doesn't exist. / अनुरोधित एंडपॉइंट मौजूद नहीं है।")
-    
-    elif status_code == 429:
-        st.error("⏸️ **Rate limit exceeded** / **दर सीमा पार हो गई**\n\nPlease wait before trying again. / पुनः प्रयास करने से पहले कृपया प्रतीक्षा करें।")
-        
-        # Extract retry-after header if available
-        retry_after = response.headers.get('Retry-After', '60')
-        st.info(f"Please wait {retry_after} seconds before retrying. / पुनः प्रयास करने से पहले {retry_after} सेकंड प्रतीक्षा करें।")
-    
-    elif status_code == 500:
-        st.error("⚠️ **Server error** / **सर्वर त्रुटि**\n\nThe backend encountered an internal error. / बैकएंड को आंतरिक त्रुटि का सामना करना पड़ा।")
-    
-    elif status_code == 503:
-        st.error("🔧 **Service unavailable** / **सेवा अनुपलब्ध**\n\nThe backend is temporarily down for maintenance. / बैकएंड अस्थायी रूप से रखरखाव के लिए बंद है।")
-    
-    else:
-        st.error(f"❌ **Unexpected error** / **अप्रत्याशित त्रुटि**: HTTP {status_code}")
-    
-    log_action(operation, 'error', f"HTTP {status_code}")
-
-
-def retry_with_backoff(
-    func: callable,
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    backoff_factor: float = 2.0
-) -> Any:
-    """Retry function with exponential backoff
-    
-    Retries a function call with exponentially increasing delays between attempts.
-    Useful for handling transient network errors and rate limiting.
-    
-    Args:
-        func: Callable function to retry
-        max_retries: Maximum number of retry attempts (default: 3)
-        initial_delay: Initial delay in seconds before first retry (default: 1.0)
-        backoff_factor: Multiplier for delay between retries (default: 2.0)
-    
-    Returns:
-        Result of the function call if successful
-    
-    Raises:
-        Exception: Re-raises the last exception if all retries fail
-    
-    Requirements: 10.1, 10.4
-    
-    Examples:
-        >>> def api_call():
-        ...     return requests.get(url, timeout=5)
-        >>> result = retry_with_backoff(api_call, max_retries=3)
-    """
-    delay = initial_delay
-    last_exception = None
-    
-    for attempt in range(max_retries):
-        try:
-            return func()
-        
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-            last_exception = e
-            
-            if attempt == max_retries - 1:
-                # Last attempt failed, re-raise
-                raise
-            
-            # Show retry message
-            st.warning(
-                f"⚠️ Attempt {attempt + 1} failed. Retrying in {delay:.1f}s... / "
-                f"प्रयास {attempt + 1} विफल। {delay:.1f}s में पुनः प्रयास..."
-            )
-            time.sleep(delay)
-            delay *= backoff_factor
-        
-        except Exception as e:
-            # Non-retryable error, raise immediately
-            raise
-    
-    # Should not reach here, but raise last exception if we do
-    if last_exception:
-        raise last_exception
-
-
-def process_with_retry(
-    operation: callable,
-    operation_name: str,
-    max_retries: int = 3
-) -> Any:
-    """Process operation with automatic retry
-    
-    Wrapper function that adds retry logic to API operations. Handles retryable
-    errors (timeouts, connection errors) with exponential backoff and displays
-    appropriate error messages for non-retryable errors.
-    
-    Args:
-        operation: Callable operation to execute
-        operation_name: Human-readable name for the operation (for error messages)
-        max_retries: Maximum number of retry attempts (default: 3)
-    
-    Returns:
-        Result of the operation if successful
-    
-    Raises:
-        Exception: Re-raises exceptions after max retries or for non-retryable errors
-    
-    Requirements: 10.1, 10.4
-    
-    Examples:
-        >>> def transcribe():
-        ...     return api_client.recognize_speech(audio_data, language)
-        >>> result = process_with_retry(transcribe, 'transcription', max_retries=3)
-    """
-    try:
-        return retry_with_backoff(operation, max_retries=max_retries)
-    
-    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-        handle_network_error(e, operation_name)
-        return None
-    
-    except requests.exceptions.HTTPError as e:
-        if e.response is not None:
-            handle_api_error(e.response, operation_name)
-        else:
-            st.error(f"❌ HTTP error during {operation_name}: {str(e)}")
-        return None
-    
-    except Exception as e:
-        st.error(f"❌ Unexpected error during {operation_name}: {str(e)}")
-        log_action(operation_name, 'error', str(e))
-        return None
+# Network-related helpers (error handling, retries, etc.) removed.
+# In-process backend eliminates HTTP requests; any exceptions are handled
+# directly where they occur.
 
 
 def parse_transcription_response(response: dict) -> dict:
@@ -1483,62 +930,6 @@ def parse_transcription_response(response: dict) -> dict:
     }
 
 
-def parse_error_response(response: requests.Response) -> str:
-    """Parse error response and extract user-friendly message
-    
-    Maps technical error messages from the backend to user-friendly messages
-    in both English and Hindi. Falls back to generic error message if parsing fails.
-    
-    Args:
-        response: HTTP response object with error status
-    
-    Returns:
-        User-friendly error message string
-    
-    Requirements: 10.3, 12.2
-    
-    Examples:
-        >>> response = requests.post(url, data=data)
-        >>> if not response.ok:
-        ...     error_msg = parse_error_response(response)
-        ...     st.error(error_msg)
-    """
-    try:
-        error_data = response.json()
-        detail = error_data.get('detail', 'Unknown error')
-        
-        # Map technical errors to user-friendly messages
-        error_messages = {
-            'Invalid audio file format': (
-                'Please upload a valid audio file (WAV, MP3, M4A, or OGG) / '
-                'कृपया एक मान्य ऑडियो फ़ाइल अपलोड करें (WAV, MP3, M4A, या OGG)'
-            ),
-            'Text too long': (
-                'Your message is too long. Please keep it under 5000 characters / '
-                'आपका संदेश बहुत लंबा है। कृपया इसे 5000 वर्णों से कम रखें'
-            ),
-            'Speech recognition failed': (
-                'Could not understand the audio. Please try again / '
-                'ऑडियो समझ नहीं आया। कृपया पुनः प्रयास करें'
-            ),
-            'Speech synthesis failed': (
-                'Could not generate audio response. Please try again / '
-                'ऑडियो प्रतिक्रिया उत्पन्न नहीं हो सकी। कृपया पुनः प्रयास करें'
-            ),
-            'Language not supported': (
-                'Selected language is not supported / '
-                'चयनित भाषा समर्थित नहीं है'
-            ),
-            'Audio file too large': (
-                'Audio file exceeds maximum size limit / '
-                'ऑडियो फ़ाइल अधिकतम आकार सीमा से अधिक है'
-            )
-        }
-        
-        return error_messages.get(detail, f"Error / त्रुटि: {detail}")
-    
-    except:
-        return f"Error / त्रुटि: HTTP {response.status_code}"
 
 
 def process_audio():
@@ -1625,22 +1016,19 @@ def process_transcription() -> Optional[dict]:
         ...     print(result['text'])
     """
     try:
-        # Create API client
-        api_client = BharatVoiceAPIClient(BACKEND_URL, REQUEST_TIMEOUT)
-        
         # Get audio data and language from session state
         audio_data = st.session_state.audio_data
         language = st.session_state.selected_language
-        
-        # Call API
+
+        # Call local backend directly
         log_action('transcribe', 'pending', f'Sending audio for transcription (language: {language})')
-        
-        response = api_client.recognize_speech(
+
+        response = backend_module.recognize_speech(
             audio_data=audio_data,
             language=language,
             enable_code_switching=True
         )
-        
+
         # Parse response
         result = response.get('result', {})
         transcription = {
@@ -1650,31 +1038,19 @@ def process_transcription() -> Optional[dict]:
             'processing_time': result.get('processing_time', 0.0),
             'alternatives': result.get('alternative_transcriptions', [])
         }
-        
+
         # Store in session state
         st.session_state.transcription = transcription
-        
+
         # Log success
         log_action(
             'transcribe',
             'success',
             f"Transcribed: {transcription['text'][:50]}..." if len(transcription['text']) > 50 else f"Transcribed: {transcription['text']}"
         )
-        
+
         return transcription
-    
-    except requests.exceptions.Timeout as e:
-        handle_network_error(e, 'transcription')
-        return None
-    
-    except requests.exceptions.ConnectionError as e:
-        handle_network_error(e, 'transcription')
-        return None
-    
-    except requests.exceptions.HTTPError as e:
-        handle_api_error(e.response, 'transcription')
-        return None
-    
+
     except Exception as e:
         st.error(f"❌ Transcription failed: {str(e)}")
         log_action('transcribe', 'error', str(e))
@@ -1704,22 +1080,19 @@ def process_response_generation() -> Optional[dict]:
         if not st.session_state.get('transcription'):
             st.error("❌ No transcription available for response generation.")
             return None
-        
-        # Create API client
-        api_client = BharatVoiceAPIClient(BACKEND_URL, REQUEST_TIMEOUT)
-        
+
         # Get transcription and language from session state
         transcription_text = st.session_state.transcription['text']
         language = st.session_state.selected_language
-        
-        # Call API
+
+        # Call local backend directly
         log_action('respond', 'pending', f'Generating response for: {transcription_text[:50]}...')
-        
-        response = api_client.generate_response(
+
+        response = backend_module.generate_response(
             text=transcription_text,
             language=language
         )
-        
+
         # Parse response
         response_data = {
             'text': response.get('text', ''),
@@ -1727,31 +1100,19 @@ def process_response_generation() -> Optional[dict]:
             'suggested_actions': response.get('suggested_actions', []),
             'processing_time': response.get('processing_time', 0.0)
         }
-        
+
         # Store in session state
         st.session_state.response = response_data
-        
+
         # Log success
         log_action(
             'respond',
             'success',
             f"Response: {response_data['text'][:50]}..." if len(response_data['text']) > 50 else f"Response: {response_data['text']}"
         )
-        
+
         return response_data
-    
-    except requests.exceptions.Timeout as e:
-        handle_network_error(e, 'response generation')
-        return None
-    
-    except requests.exceptions.ConnectionError as e:
-        handle_network_error(e, 'response generation')
-        return None
-    
-    except requests.exceptions.HTTPError as e:
-        handle_api_error(e.response, 'response generation')
-        return None
-    
+
     except Exception as e:
         st.error(f"❌ Response generation failed: {str(e)}")
         log_action('respond', 'error', str(e))
@@ -1785,52 +1146,31 @@ def process_tts() -> Optional[bytes]:
         if not st.session_state.get('response'):
             st.warning("⚠️ No response available for TTS synthesis.")
             return None
-        
-        # Create API client
-        api_client = BharatVoiceAPIClient(BACKEND_URL, REQUEST_TIMEOUT)
-        
+
         # Get response text and language from session state
         response_text = st.session_state.response['text']
         language = st.session_state.selected_language
-        
-        # Call API
+
+        # Call local backend directly
         log_action('tts', 'pending', f'Synthesizing speech for: {response_text[:50]}...')
-        
-        audio_bytes = api_client.synthesize_speech(
+
+        audio_bytes = backend_module.synthesize_speech(
             text=response_text,
             language=language
         )
-        
+
         # Store in session state
         st.session_state.tts_audio = audio_bytes
-        
+
         # Log success
-        audio_size_kb = len(audio_bytes) / 1024
+        audio_size_kb = len(audio_bytes) / 1024 if audio_bytes else 0
         log_action('tts', 'success', f'Generated TTS audio ({audio_size_kb:.2f} KB)')
-        
+
         return audio_bytes
-    
-    except requests.exceptions.Timeout as e:
-        # Graceful degradation - log warning but don't fail
-        st.warning("⚠️ TTS synthesis timed out. Displaying text response only. / TTS संश्लेषण समय समाप्त। केवल पाठ प्रतिक्रिया प्रदर्शित कर रहे हैं।")
-        log_action('tts', 'warning', 'TTS timeout - graceful degradation to text-only')
-        return None
-    
-    except requests.exceptions.ConnectionError as e:
-        # Graceful degradation
-        st.warning("⚠️ Cannot connect for TTS. Displaying text response only. / TTS के लिए कनेक्ट नहीं हो सकता। केवल पाठ प्रतिक्रिया प्रदर्शित कर रहे हैं।")
-        log_action('tts', 'warning', 'TTS connection error - graceful degradation to text-only')
-        return None
-    
-    except requests.exceptions.HTTPError as e:
-        # Graceful degradation
-        st.warning("⚠️ TTS synthesis failed. Displaying text response only. / TTS संश्लेषण विफल। केवल पाठ प्रतिक्रिया प्रदर्शित कर रहे हैं।")
-        log_action('tts', 'warning', f'TTS HTTP error {e.response.status_code} - graceful degradation to text-only')
-        return None
-    
+
     except Exception as e:
-        # Graceful degradation
-        st.warning(f"⚠️ TTS synthesis failed: {str(e)}. Displaying text response only. / TTS संश्लेषण विफल: {str(e)}। केवल पाठ प्रतिक्रिया प्रदर्शित कर रहे हैं।")
+        # Graceful degradation - log warning but don't fail
+        st.warning(f"⚠️ TTS synthesis failed or timed out. Displaying text response only. / TTS संश्लेषण विफल या समय समाप्त: {str(e)}")
         log_action('tts', 'warning', f'TTS error - graceful degradation to text-only: {str(e)}')
         return None
 
