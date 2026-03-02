@@ -794,7 +794,7 @@ def render_voice_recorder():
             # Calculate audio size
             audio_size_mb = len(audio_bytes) / (1024 * 1024)
             
-            # Display recorded audio player
+            # Display recorded audio player (avoid unsupported kwargs)
             st.audio(audio_bytes, format='audio/wav')
             st.success(f"✅ Recording complete ({audio_size_mb:.2f}MB) / रिकॉर्डिंग पूर्ण ({audio_size_mb:.2f}MB)")
             
@@ -1280,7 +1280,8 @@ def render_audio_player():
             audio_bytes = audio_data
         
         # Display audio player with friendly message
-        st.audio(audio_bytes, format='audio/mp3', use_container_width=True)
+        # `use_container_width` is not supported by some Streamlit versions for audio
+        st.audio(audio_bytes, format='audio/mp3')
         st.success("✅ Audio response generated successfully!")
     else:
         st.info("💡 Process audio to generate audio response.")
