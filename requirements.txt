@@ -10,6 +10,6 @@ audio-recorder-streamlit>=0.0.8
 # Environment variable management
 python-dotenv>=1.0.0
 
-# Testing dependencies
-pytest>=7.4.0
-hypothesis>=6.82.0
+# Text-to-Speech for multiple Indian languages
+gtts>=2.4.0
+

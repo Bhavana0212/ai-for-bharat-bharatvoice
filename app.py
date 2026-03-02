@@ -1176,75 +1176,96 @@ def process_tts() -> Optional[bytes]:
 
 
 def render_language_selector():
-    """Render language selection dropdown"""
+    """Render language selection dropdown with professional styling"""
     languages = {
-        'hi': 'हिन्दी (Hindi)',
-        'en-IN': 'English (India)',
-        'ta': 'தமிழ் (Tamil)',
-        'te': 'తెలుగు (Telugu)',
-        'bn': 'বাংলা (Bengali)',
-        'mr': 'मराठी (Marathi)',
-        'gu': 'ગુજરાતી (Gujarati)',
-        'kn': 'ಕನ್ನಡ (Kannada)',
-        'ml': 'മലയാളം (Malayalam)',
-        'pa': 'ਪੰਜਾਬੀ (Punjabi)',
-        'or': 'ଓଡ଼ିଆ (Odia)'
+        'hi': '🇮🇳 हिन्दी (Hindi)',
+        'en-IN': '🇬🇧 English (India)',
+        'ta': '🇮🇳 தமிழ் (Tamil)',
+        'te': '🇮🇳 తెలుగు (Telugu)',
+        'bn': '🇮🇳 বাংলা (Bengali)',
+        'mr': '🇮🇳 मराठी (Marathi)',
+        'gu': '🇮🇳 ગુજરાતી (Gujarati)',
+        'kn': '🇮🇳 ಕನ್ನಡ (Kannada)',
+        'ml': '🇮🇳 മലയാളം (Malayalam)',
+        'pa': '🇮🇳 ਪੰਜਾਬੀ (Punjabi)',
+        'or': '🇮🇳 ଓଡ଼ିଆ (Odia)'
     }
     
     selected = st.selectbox(
-        "Select Language / भाषा चुनें",
+        "Choose your language",
         options=list(languages.keys()),
         format_func=lambda x: languages[x],
-        key='selected_language'
+        key='selected_language',
+        label_visibility="collapsed"
     )
     
     return selected
 
 
 def render_transcription_display():
-    """Render transcription results"""
+    """Render transcription results with professional styling"""
     if 'transcription' in st.session_state and st.session_state.transcription:
-        st.subheader("Transcription / प्रतिलेखन")
-        
-        transcription = st.session_state.transcription
-        
-        # Display transcription text
-        st.info(transcription.get('text', ''))
-        
-        # Display metadata
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            confidence = transcription.get('confidence', 0.0)
-            st.metric("Confidence / विश्वास", f"{confidence:.2%}")
-        with col2:
-            detected_lang = transcription.get('detected_language', 'unknown')
-            st.metric("Language / भाषा", detected_lang)
-        with col3:
-            proc_time = transcription.get('processing_time', 0.0)
-            st.metric("Processing Time / समय", f"{proc_time:.2f}s")
+        with st.container():
+            st.markdown("#### 📝 Transcription")
+            
+            transcription = st.session_state.transcription
+            
+            # Display transcription text in a result box
+            st.markdown(
+                f"<div class='result-box'><strong>{transcription.get('text', '')}</strong></div>",
+                unsafe_allow_html=True
+            )
+            
+            # Display metadata in a clean row
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                confidence = transcription.get('confidence', 0.0)
+                st.metric("Confidence", f"{confidence:.0%}", delta=None)
+            with col2:
+                detected_lang = transcription.get('detected_language', 'unknown')
+                lang_names = {
+                    'hi': 'Hindi', 'en-IN': 'English', 'ta': 'Tamil', 'te': 'Telugu',
+                    'bn': 'Bengali', 'mr': 'Marathi', 'gu': 'Gujarati', 'kn': 'Kannada',
+                    'ml': 'Malayalam', 'pa': 'Punjabi', 'or': 'Odia'
+                }
+                st.metric("Language", lang_names.get(detected_lang, detected_lang))
+            with col3:
+                proc_time = transcription.get('processing_time', 0.0)
+                st.metric("Processing", f"{proc_time:.2f}s")
 
 
 def render_response_display():
-    """Render AI response"""
+    """Render AI response with professional styling"""
     if 'response' in st.session_state and st.session_state.response:
-        st.subheader("Response / प्रतिक्रिया")
-        
-        response = st.session_state.response
-        
-        # Display response text
-        st.success(response.get('text', ''))
-        
-        # Display suggested actions if available
-        if response.get('suggested_actions'):
-            st.write("**Suggested Actions / सुझाए गए कार्य:**")
-            for action in response['suggested_actions']:
-                st.button(action.get('label', ''), key=f"action_{action.get('id', '')}")
+        with st.container():
+            st.markdown("#### 💬 AI Response")
+            
+            response = st.session_state.response
+            
+            # Display response text in a highlighted box
+            st.markdown(
+                f"<div class='result-box' style='border-left-color: #10b981;'>"
+                f"<strong>{response.get('text', '')}</strong></div>",
+                unsafe_allow_html=True
+            )
+            
+            # Display suggested actions if available
+            if response.get('suggested_actions'):
+                st.markdown("**Suggested Actions:**")
+                cols = st.columns(len(response['suggested_actions']))
+                for idx, action in enumerate(response['suggested_actions']):
+                    with cols[idx]:
+                        st.button(
+                            action.get('label', ''),
+                            key=f"action_{action.get('id', '')}_pro",
+                            use_container_width=True
+                        )
 
 
 def render_audio_player():
-    """Render audio player for TTS response"""
+    """Render audio player for TTS response with professional styling"""
     if 'tts_audio' in st.session_state and st.session_state.tts_audio:
-        st.subheader("Audio Response / ऑडियो प्रतिक्रिया")
+        st.markdown("#### 🔊 Audio Response")
         
         audio_data = st.session_state.tts_audio
         
@@ -1258,7 +1279,12 @@ def render_audio_player():
         else:
             audio_bytes = audio_data
         
-        st.audio(audio_bytes, format='audio/wav')
+        # Display audio player with friendly message
+        st.audio(audio_bytes, format='audio/mp3', use_container_width=True)
+        st.success("✅ Audio response generated successfully!")
+    else:
+        st.info("💡 Process audio to generate audio response.")
+
 
 
 def render_progress_indicator(operation: str, progress: float = None):
@@ -1360,13 +1386,76 @@ def main():
     # Log application startup
     logger.info("BharatVoice AI Streamlit application starting...")
     
-    # Set page configuration
+    # Set page configuration with professional styling
     st.set_page_config(
         page_title="BharatVoice AI Assistant",
         page_icon="🎙️",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="collapsed"
     )
+    
+    # Custom CSS for professional look
+    st.markdown("""
+    <style>
+        /* Main container padding */
+        .main { padding-top: 2rem; }
+        
+        /* Title styling */
+        h1 { 
+            text-align: center; 
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Subtitle styling */
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+        }
+        
+        /* Section divider */
+        .divider { margin: 2rem 0 1.5rem 0; }
+        
+        /* Card styling */
+        .card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+        }
+        
+        /* Button styling */
+        .stButton > button {
+            border-radius: 8px;
+            padding: 0.75rem 2rem;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        /* Metrics styling */
+        .metric-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        /* Result boxes */
+        .result-box {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 1.5rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+        }
+    </style>
+    """, unsafe_allow_html=True)
     
     # Initialize session state
     initialize_session_state()
@@ -1378,82 +1467,99 @@ def main():
     if st.session_state.get('is_online', True):
         process_offline_queue()
     
-    # Display title and description
-    st.title("🎙️ BharatVoice AI Assistant")
-    st.markdown("**Voice Assistant for India** / **भारत के लिए वॉयस असिस्टेंट**")
-    st.markdown("Interact with AI using your voice in 11 Indian languages / 11 भारतीय भाषाओं में अपनी आवाज़ का उपयोग करके AI के साथ बातचीत करें")
+    # Header Section
+    st.markdown("<h1>🎙️ BharatVoice AI Assistant</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='subtitle'><strong>Voice Assistant for India</strong> | "
+        "<strong>भारत के लिए वॉयस असिस्टेंट</strong></div>",
+        unsafe_allow_html=True
+    )
+    st.markdown("Interact with AI using your voice in 11 Indian languages / "
+                "11 भारतीय भाषाओं में अपनी आवाज़ का उपयोग करके AI के साथ बातचीत करें", unsafe_allow_html=False)
     
     # Render offline indicator if needed
     render_offline_indicator()
     
-    # Language selector at top
-    st.markdown("---")
-    selected_language = render_language_selector()
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     
-    # Audio input section
-    st.markdown("---")
-    st.subheader("Audio Input / ऑडियो इनपुट")
+    # Language Selection Section
+    col_lang_label, col_lang_select = st.columns([1, 3])
+    with col_lang_label:
+        st.markdown("### 🌐 Language")
+    with col_lang_select:
+        selected_language = render_language_selector()
+    
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    
+    # Audio Input Section
+    st.markdown("### 🎤 Audio Input")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**Upload Audio File / ऑडियो फ़ाइल अपलोड करें**")
+        st.markdown("#### 📤 Upload Audio File")
+        st.caption("WAV, MP3, M4A, or OGG (max 10MB)")
         render_audio_uploader()
     
     with col2:
-        st.markdown("**Record Audio / ऑडियो रिकॉर्ड करें**")
+        st.markdown("#### 🎙️ Record Audio")
+        st.caption("Click microphone to record (stops after 2 sec silence)")
         render_voice_recorder()
     
-    # Process button
-    st.markdown("---")
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     
-    # Check if audio data exists
+    # Process Section
     has_audio = st.session_state.get('audio_data') is not None
     is_processing = st.session_state.get('is_processing', False)
     is_online = st.session_state.get('is_online', True)
     
-    # Disable button if no audio, already processing, or offline
     button_disabled = not has_audio or is_processing or not is_online
     
-    if not has_audio:
-        st.info("ℹ️ Please upload or record audio to continue / जारी रखने के लिए कृपया ऑडियो अपलोड या रिकॉर्ड करें")
+    # Status messages
+    col_status1, col_status2 = st.columns(2)
+    with col_status1:
+        if not has_audio:
+            st.info("📝 Ready. Upload or record audio to begin.")
+    with col_status2:
+        if not is_online:
+            st.warning("⚠️ Backend is offline.")
     
-    if not is_online:
-        st.warning("⚠️ Backend is offline. Cannot process audio. / बैकएंड ऑफ़लाइन है। ऑडियो प्रोसेस नहीं कर सकते।")
-    
-    # Process Audio button
+    # Main process button
     if st.button(
-        "🎯 Process Audio / ऑडियो प्रोसेस करें",
+        "▶️ Process Audio",
         disabled=button_disabled,
         type="primary",
-        use_container_width=True
+        use_container_width=True,
+        key="process_btn"
     ):
-        # Validate audio data
         if st.session_state.audio_data:
             logger.info("Processing audio button clicked")
-            # Call process_audio orchestration function
             process_audio()
         else:
             logger.warning("Process button clicked but no audio data found")
-            st.error("❌ No audio data found. Please upload or record audio first. / कोई ऑडियो डेटा नहीं मिला। कृपया पहले ऑडियो अपलोड या रिकॉर्ड करें।")
+            st.error("❌ No audio data found. Please upload or record audio first.")
     
-    # Display results section
-    st.markdown("---")
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     
-    # Render transcription display
-    render_transcription_display()
+    # Results Section
+    st.markdown("### 📊 Results")
     
-    # Render response display
-    render_response_display()
+    results_col1, results_col2 = st.columns([1, 1])
     
-    # Render audio player
+    with results_col1:
+        render_transcription_display()
+    
+    with results_col2:
+        render_response_display()
+    
+    # Full-width audio player
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     render_audio_player()
     
-    # Render action log in sidebar
+    # Sidebar
     render_action_log()
-    
-    # Render debug panel if DEBUG mode is enabled
     render_debug_panel()
+
 
 
 if __name__ == "__main__":

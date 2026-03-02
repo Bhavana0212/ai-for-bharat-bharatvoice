@@ -58,17 +58,58 @@ def generate_response(text: str, language: Optional[str] = None, context: Option
 
 
 def synthesize_speech(text: str, language: Optional[str] = None, accent: str = 'standard', speed: float = 1.0, pitch: float = 1.0) -> bytes:
-    """Generate a short WAV (16-bit PCM mono) containing a simple tone whose
-    duration approximates the message length. This is a deterministic, dependency-free
-    placeholder so Streamlit can play audio without reaching an external TTS service.
+    """Generate TTS audio using gTTS for natural speech in 11 Indian languages.
+    
+    Supports:
+    - Hindi (hi), English-India (en-IN), Tamil (ta), Telugu (te), Bengali (bn)
+    - Marathi (mr), Gujarati (gu), Kannada (kn), Malayalam (ml), Punjabi (pa), Odia (or)
     """
-    # Estimate duration from word count (rough)
+    try:
+        from gtts import gTTS
+    except ImportError:
+        # Fallback to tone if gTTS not installed
+        return _generate_tone_fallback(text, speed, pitch)
+    
+    # Map language codes to gTTS language codes (gTTS uses ISO 639-1 codes)
+    lang_map = {
+        'hi': 'hi',           # Hindi
+        'en-IN': 'en',        # English (India)
+        'ta': 'ta',           # Tamil
+        'te': 'te',           # Telugu
+        'bn': 'bn',           # Bengali
+        'mr': 'mr',           # Marathi
+        'gu': 'gu',           # Gujarati
+        'kn': 'kn',           # Kannada
+        'ml': 'ml',           # Malayalam
+        'pa': 'pa',           # Punjabi
+        'or': 'or'            # Odia
+    }
+    
+    gtts_lang = lang_map.get(language, 'hi')
+    
+    try:
+        # Generate TTS using gTTS
+        tts = gTTS(text=text, lang=gtts_lang, slow=False)
+        
+        # Save to BytesIO buffer (in-memory)
+        audio_buffer = io.BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        
+        return audio_buffer.getvalue()
+    except Exception as e:
+        print(f"gTTS error: {e}. Using fallback tone.")
+        return _generate_tone_fallback(text, speed, pitch)
+
+
+def _generate_tone_fallback(text: str, speed: float = 1.0, pitch: float = 1.0) -> bytes:
+    """Fallback tone generator if gTTS fails."""
     words = max(1, len(text.split()))
-    duration_seconds = min(10.0, max(0.5, words / 3.0))  # between 0.5s and 10s
+    duration_seconds = min(10.0, max(0.5, words / 3.0))  # 0.5-10s
 
     sample_rate = 22050
     amplitude = 16000
-    freq = 440.0  # A4 tone
+    freq = 440.0
     n_samples = int(sample_rate * duration_seconds)
 
     buf = io.BytesIO()
@@ -79,8 +120,7 @@ def synthesize_speech(text: str, language: Optional[str] = None, accent: str = '
 
         for i in range(n_samples):
             t = i / sample_rate
-            # simple sine tone modulated by speed/pitch
-            value = int(amplitude * math.sin(2.0 * math.pi * freq * (pitch) * t) * (0.5 + 0.5 * math.sin(0.25 * t)))
+            value = int(amplitude * math.sin(2.0 * math.pi * freq * pitch * t) * (0.5 + 0.5 * math.sin(0.25 * t)))
             wf.writeframesraw(struct.pack('<h', value))
 
     return buf.getvalue()
